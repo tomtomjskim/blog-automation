@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AI를 활용한 네이버 블로그 자동화 도구">
+  <meta name="theme-color" content="#0066FF">
+
+  <title>Blog Auto - AI 블로그 자동화</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✍️</text></svg>">
+
+  <!-- Preconnect -->
+  <link rel="preconnect" href="https://api.anthropic.com">
+  <link rel="preconnect" href="https://api.openai.com">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+
+  <style>
+    /* 페이지별 추가 스타일 */
+
+    /* 홈 페이지 */
+    .home-page .hero {
+      text-align: center;
+      padding: 48px 0 32px;
+    }
+
+    .hero-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .hero-subtitle {
+      font-size: 16px;
+      color: var(--text-tertiary);
+    }
+
+    .generation-form {
+      margin-top: 24px;
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 480px) {
+      .options-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .recent-section {
+      margin-top: 32px;
+    }
+
+    .recent-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .recent-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .recent-item:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .recent-item-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .recent-item-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .recent-item-meta {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    /* 결과 페이지 */
+    .result-info {
+      background: linear-gradient(135deg, var(--success-light), var(--bg-primary));
+    }
+
+    .result-status {
+      font-weight: 600;
+      color: var(--success);
+    }
+
+    .result-time {
+      color: var(--text-tertiary);
+      margin-left: 8px;
+    }
+
+    .result-provider {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .preview-content {
+      line-height: 1.8;
+      white-space: pre-wrap;
+    }
+
+    .preview-content h1, .preview-content h2, .preview-content h3 {
+      margin-top: 24px;
+      margin-bottom: 12px;
+    }
+
+    .preview-content ul, .preview-content ol {
+      padding-left: 24px;
+      margin: 12px 0;
+    }
+
+    .preview-content li {
+      margin: 4px 0;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 16px;
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .info-label {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    .info-value {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .seo-items {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .seo-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+    }
+
+    .seo-item-status {
+      width: 20px;
+      text-align: center;
+    }
+
+    .seo-item-name {
+      font-weight: 500;
+      min-width: 100px;
+    }
+
+    .seo-item-message {
+      color: var(--text-tertiary);
+      font-size: 14px;
+    }
+
+    .seo-score {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .seo-score.score-good { color: var(--success); }
+    .seo-score.score-warning { color: var(--warning); }
+    .seo-score.score-error { color: var(--error); }
+
+    .action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .edit-content {
+      min-height: 400px;
+      font-family: inherit;
+      line-height: 1.8;
+    }
+
+    /* 설정 페이지 */
+    .lock-screen {
+      text-align: center;
+      padding: 48px 24px;
+    }
+
+    .lock-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+
+    .lock-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .lock-desc {
+      color: var(--text-tertiary);
+    }
+
+    .lock-hint {
+      font-size: 12px;
+      color: var(--text-quaternary);
+    }
+
+    .api-key-item {
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .api-key-item:last-child {
+      border-bottom: none;
+    }
+
+    .api-key-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .api-key-icon {
+      font-size: 24px;
+    }
+
+    .api-key-info {
+      flex: 1;
+    }
+
+    .api-key-name {
+      display: block;
+      font-weight: 500;
+    }
+
+    .api-key-desc {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    .api-key-status {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      padding: 4px 8px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+    }
+
+    .api-key-status.connected {
+      color: var(--success);
+      background: var(--success-light);
+    }
+
+    .api-key-input-wrapper {
+      display: flex;
+      gap: 8px;
+    }
+
+    .api-key-input {
+      flex: 1;
+    }
+
+    .setting-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .setting-item:last-child {
+      border-bottom: none;
+    }
+
+    .setting-info {
+      flex: 1;
+    }
+
+    .setting-label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .setting-desc {
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    .setting-control {
+      max-width: 180px;
+    }
+
+    .data-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      text-align: center;
+    }
+
+    @media (max-width: 480px) {
+      .data-stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .stat-item {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+    }
+
+    .stat-value {
+      display: block;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    .data-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .action-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+    }
+
+    .action-item.danger {
+      background: var(--error-light);
+    }
+
+    .action-label {
+      font-weight: 500;
+    }
+
+    .action-desc {
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    .naver-connected {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      background: var(--success-light);
+      border-radius: 12px;
+    }
+
+    .connected-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .connected-icon {
+      font-size: 24px;
+    }
+
+    .category-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .guide-steps {
+      padding-left: 20px;
+      color: var(--text-secondary);
+    }
+
+    .guide-steps li {
+      margin: 8px 0;
+    }
+
+    /* 이미지 페이지 */
+    .image-options .option-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 480px) {
+      .image-options .option-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .count-selector {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .count-value {
+      font-size: 18px;
+      font-weight: 600;
+      min-width: 32px;
+      text-align: center;
+    }
+
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .image-item {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .image-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .image-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .image-item:hover .image-overlay {
+      opacity: 1;
+    }
+
+    .prompt-tips {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .tip-item {
+      display: flex;
+      gap: 12px;
+    }
+
+    .tip-icon {
+      font-size: 24px;
+    }
+
+    .tip-content strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .tip-content p {
+      font-size: 14px;
+      color: var(--text-tertiary);
+    }
+
+    .example-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .example-prompt {
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .example-prompt:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    /* 히스토리 페이지 */
+    .history-filters .filters-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .search-box {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .filter-group, .sort-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .history-stats {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .stat-badge {
+      padding: 6px 12px;
+      background: var(--bg-secondary);
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .stat-badge.filtered {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .history-item {
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .history-item:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .history-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .history-item-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .history-item-meta {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .provider-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      background: var(--bg-tertiary);
+    }
+
+    .provider-badge.anthropic { background: #F5E6D3; color: #8B5A2B; }
+    .provider-badge.openai { background: #E8F5E9; color: #2E7D32; }
+    .provider-badge.google { background: #E3F2FD; color: #1565C0; }
+    .provider-badge.groq { background: #FCE4EC; color: #C2185B; }
+
+    .date-badge {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    .history-item-preview {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .history-item-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .history-item-stats {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    .history-item-stats .tags {
+      display: flex;
+      gap: 4px;
+    }
+
+    .history-item-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    /* 퀵 액션 모달 */
+    .quick-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .quick-action-item {
+      display: block;
+      width: 100%;
+      padding: 12px 16px;
+      text-align: left;
+      background: var(--bg-secondary);
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .quick-action-item:hover,
+    .quick-action-item:focus {
+      background: var(--primary-light);
+      color: var(--primary);
+      outline: none;
+    }
+
+    /* 로딩 스플래시 */
+    .splash-screen {
+      position: fixed;
+      inset: 0;
+      background: var(--bg-primary);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.3s ease;
+    }
+
+    .splash-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .splash-logo {
+      font-size: 64px;
+      margin-bottom: 24px;
+      animation: bounce 1s ease infinite;
+    }
+
+    .splash-text {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+  </style>
+</head>
+<body>
+  <!-- 로딩 스플래시 -->
+  <div class="splash-screen" id="splash">
+    <div class="splash-logo">✍️</div>
+    <div class="splash-text">Blog Auto</div>
+  </div>
+
+  <!-- 메인 앱 -->
+  <div id="app"></div>
+
+  <!-- 모듈 스크립트 -->
+  <script type="module" src="js/app.js"></script>
+
+  <!-- 스플래시 화면 숨기기 -->
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        document.getElementById('splash').classList.add('hidden');
+      }, 500);
+    });
+  </script>
+</body>
+</html>

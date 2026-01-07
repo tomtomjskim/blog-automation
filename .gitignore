@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local config
+.env
+.env.local
+*.local
+
+# Build outputs (none for this project)
+dist/
+build/
+
+# Cache
+.cache/
+
+# Temporary files
+tmp/
+temp/
