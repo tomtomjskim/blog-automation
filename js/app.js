@@ -38,8 +38,7 @@ async function bootstrap() {
   // 시스템 테마 변경 감지
   setupThemeWatcher();
 
-  // 초기 라우팅
-  router.init();
+  // 라우터는 load 이벤트에서 자동으로 초기 라우팅 처리함
 
   console.log('✅ Blog Automation Ready');
 }
@@ -49,11 +48,11 @@ async function bootstrap() {
  */
 function setupRouter() {
   // 페이지 라우트 등록
-  router.addRoute('home', renderHomePage);
-  router.addRoute('result', renderResultPage);
-  router.addRoute('settings', renderSettingsPage);
-  router.addRoute('image', renderImagePage);
-  router.addRoute('history', renderHistoryPage);
+  router.register('home', renderHomePage);
+  router.register('result', renderResultPage);
+  router.register('settings', renderSettingsPage);
+  router.register('image', renderImagePage);
+  router.register('history', renderHistoryPage);
 
   // 404 처리
   router.setNotFound(() => {
@@ -61,9 +60,9 @@ function setupRouter() {
   });
 
   // 라우트 가드
-  router.beforeEach((to, from) => {
+  router.beforeEach(({ to, from }) => {
     // result 페이지는 결과가 있어야 접근 가능
-    if (to === 'result' && !store.get('result')) {
+    if (to.path === 'result' && !store.get('result')) {
       toast.warning('먼저 글을 생성해주세요');
       return 'home';
     }
@@ -71,12 +70,12 @@ function setupRouter() {
   });
 
   // 페이지 전환 후 처리
-  router.afterEach((to) => {
+  router.afterEach(({ to }) => {
     // 페이지 최상단으로 스크롤
     window.scrollTo(0, 0);
 
     // 현재 페이지 상태 업데이트
-    store.setState({ currentPage: to });
+    store.setState({ currentPage: to.path });
   });
 }
 
