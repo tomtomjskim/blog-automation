@@ -1,16 +1,18 @@
 /**
- * Blog Automation - Image Generation Page
- * AI 이미지 생성 페이지
+ * Blog Automation - Image Page
+ * AI 이미지 생성 + 로컬 이미지 업로드
  */
 
 import { store, updateCurrentGeneration } from '../state.js';
 import { llmService } from '../services/llm-service.js';
+import { imageUploader } from '../services/image-uploader.js';
 import { toast } from '../ui/toast.js';
 import { modal } from '../ui/modal.js';
 import { router } from '../core/router.js';
 
 let generatedImages = [];
 let isGenerating = false;
+let activeTab = 'upload'; // 'upload' | 'generate'
 
 /**
  * 이미지 페이지 렌더링
@@ -21,6 +23,7 @@ export function renderImagePage() {
 
   // 이미지 생성 가능 여부 확인
   const canGenerate = apiKeys.openai || apiKeys.stability;
+  const uploadedImages = imageUploader.images;
 
   app.innerHTML = `
     <div class="image-page">
@@ -30,10 +33,27 @@ export function renderImagePage() {
           <button class="btn btn-ghost" onclick="history.back()">
             ← 뒤로
           </button>
-          <h1 class="page-title">이미지 생성</h1>
+          <h1 class="page-title">이미지</h1>
         </div>
 
-        ${!canGenerate ? renderNoApiKeyMessage() : `
+        <!-- 탭 메뉴 -->
+        <div class="tabs mb-6">
+          <button class="tab ${activeTab === 'upload' ? 'active' : ''}" data-tab="upload">
+            📁 이미지 업로드
+          </button>
+          <button class="tab ${activeTab === 'generate' ? 'active' : ''}" data-tab="generate">
+            🎨 AI 생성
+          </button>
+        </div>
+
+        <!-- 업로드 탭 -->
+        <div class="tab-content ${activeTab === 'upload' ? '' : 'hidden'}" id="tab-upload">
+          ${renderUploadSection(uploadedImages)}
+        </div>
+
+        <!-- 생성 탭 -->
+        <div class="tab-content ${activeTab === 'generate' ? '' : 'hidden'}" id="tab-generate">
+          ${!canGenerate ? renderNoApiKeyMessage() : `
           <!-- 프롬프트 입력 -->
           <div class="card">
             <div class="card-header">
@@ -163,12 +183,260 @@ export function renderImagePage() {
             </div>
           </div>
         `}
+        </div>
       </div>
     </div>
   `;
 
   // 이벤트 바인딩
   bindImageEvents();
+  bindUploadEvents();
+  bindTabEvents();
+}
+
+/**
+ * 업로드 섹션 렌더링
+ */
+function renderUploadSection(uploadedImages) {
+  return `
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">로컬 이미지 업로드</h2>
+        <p class="card-description">블로그에 사용할 이미지를 업로드하세요</p>
+      </div>
+      <div class="card-body">
+        <!-- 업로드 영역 -->
+        <div class="image-upload-zone">
+          <div class="upload-area" id="upload-area">
+            <input type="file" id="file-input" accept="image/*" multiple hidden>
+            <div class="upload-placeholder">
+              <span class="upload-icon">📷</span>
+              <p class="upload-text">이미지를 드래그하거나 클릭하여 선택</p>
+              <p class="upload-hint">JPEG, PNG, GIF, WebP (최대 10MB)</p>
+              <p class="upload-hint"><kbd>Ctrl</kbd>+<kbd>V</kbd>로 클립보드에서 붙여넣기</p>
+            </div>
+          </div>
+
+          <!-- 업로드된 이미지 미리보기 -->
+          ${uploadedImages.length > 0 ? `
+            <div class="upload-preview" id="upload-preview">
+              ${uploadedImages.map(img => `
+                <div class="preview-item" data-id="${img.id}">
+                  <img src="${img.thumbnail || img.base64}" alt="${img.alt}">
+                  <div class="preview-overlay">
+                    <button class="btn-remove" data-id="${img.id}" title="삭제">×</button>
+                  </div>
+                  <div class="preview-info">
+                    <input type="text" class="alt-input"
+                      value="${img.alt}"
+                      placeholder="alt 텍스트"
+                      data-id="${img.id}">
+                    <span class="preview-size">${formatFileSize(img.size)}</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <div class="upload-actions">
+              <span class="upload-count">${uploadedImages.length}/${imageUploader.constructor.MAX_FILES}개</span>
+              <div class="flex gap-2">
+                <button class="btn btn-outline btn-sm" id="clear-uploads">전체 삭제</button>
+                <button class="btn btn-primary btn-sm" id="use-uploads">글에 사용하기</button>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- 사용 안내 -->
+        <div class="prompt-tips mt-6">
+          <div class="tip-item">
+            <span class="tip-icon">✨</span>
+            <div class="tip-content">
+              <strong>자동 최적화</strong>
+              <p>큰 이미지는 자동으로 리사이징되고 EXIF 정보가 제거됩니다</p>
+            </div>
+          </div>
+          <div class="tip-item">
+            <span class="tip-icon">📝</span>
+            <div class="tip-content">
+              <strong>Alt 텍스트</strong>
+              <p>이미지 아래 입력창에서 SEO에 도움되는 alt 텍스트를 수정하세요</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * 탭 전환 이벤트
+ */
+function bindTabEvents() {
+  document.querySelectorAll('.tabs .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      activeTab = tab.dataset.tab;
+      renderImagePage();
+    });
+  });
+}
+
+/**
+ * 업로드 이벤트 바인딩
+ */
+function bindUploadEvents() {
+  const uploadArea = document.getElementById('upload-area');
+  const fileInput = document.getElementById('file-input');
+
+  if (!uploadArea || !fileInput) return;
+
+  // 클릭하여 파일 선택
+  uploadArea.addEventListener('click', () => fileInput.click());
+
+  // 파일 선택 시
+  fileInput.addEventListener('change', async (e) => {
+    if (e.target.files.length > 0) {
+      await handleFileUpload(e.target.files);
+      fileInput.value = '';
+    }
+  });
+
+  // 드래그 앤 드롭
+  uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+  });
+
+  uploadArea.addEventListener('dragleave', () => {
+    uploadArea.classList.remove('dragover');
+  });
+
+  uploadArea.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      await handleFileUpload(files);
+    }
+  });
+
+  // 클립보드 붙여넣기 (페이지 전체)
+  document.addEventListener('paste', handlePaste);
+
+  // 이미지 삭제 버튼
+  document.querySelectorAll('.preview-overlay .btn-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      imageUploader.remove(id);
+      toast.success('이미지가 삭제되었습니다');
+      renderImagePage();
+    });
+  });
+
+  // Alt 텍스트 업데이트
+  document.querySelectorAll('.alt-input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      imageUploader.updateAlt(e.target.dataset.id, e.target.value);
+    });
+    input.addEventListener('click', (e) => e.stopPropagation());
+  });
+
+  // 전체 삭제
+  document.getElementById('clear-uploads')?.addEventListener('click', () => {
+    modal.confirm({
+      title: '전체 삭제',
+      message: '업로드된 모든 이미지를 삭제하시겠습니까?',
+      confirmText: '삭제',
+      onConfirm: () => {
+        imageUploader.clear();
+        toast.success('모든 이미지가 삭제되었습니다');
+        renderImagePage();
+      }
+    });
+  });
+
+  // 글에 사용하기
+  document.getElementById('use-uploads')?.addEventListener('click', () => {
+    const images = imageUploader.images;
+    if (images.length === 0) {
+      toast.error('업로드된 이미지가 없습니다');
+      return;
+    }
+
+    const currentGen = store.get('currentGeneration') || {};
+    updateCurrentGeneration({
+      images: [...(currentGen.images || []), ...images.map(img => ({
+        url: img.base64,
+        alt: img.alt,
+        width: img.width,
+        height: img.height,
+        type: 'uploaded'
+      }))]
+    });
+
+    toast.success(`${images.length}개 이미지가 글에 추가되었습니다`);
+    imageUploader.clear();
+    router.navigate('result');
+  });
+}
+
+/**
+ * 파일 업로드 처리
+ */
+async function handleFileUpload(files) {
+  const loadingToast = toast.loading('이미지 처리 중...');
+
+  try {
+    const results = await imageUploader.processFiles(files);
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+
+    loadingToast.dismiss();
+
+    if (successCount > 0) {
+      toast.success(`${successCount}개 이미지 업로드 완료`);
+    }
+    if (failCount > 0) {
+      const errors = results.filter(r => !r.success);
+      toast.error(`${failCount}개 실패: ${errors[0].error}`);
+    }
+
+    renderImagePage();
+  } catch (error) {
+    loadingToast.dismiss();
+    toast.error(error.message);
+  }
+}
+
+/**
+ * 클립보드 붙여넣기 처리
+ */
+async function handlePaste(e) {
+  // 입력 필드에서는 무시
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  const items = e.clipboardData?.items;
+  if (!items) return;
+
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (file) {
+        await handleFileUpload([file]);
+      }
+      break;
+    }
+  }
+}
+
+/**
+ * 파일 크기 포맷
+ */
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
 /**

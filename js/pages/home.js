@@ -6,12 +6,17 @@
 import { store, updateCurrentGeneration, startLoading, stopLoading, setError, setResult, saveDraft } from '../state.js';
 import { blogGenerator } from '../services/blog-generator.js';
 import { llmService } from '../services/llm-service.js';
+import { imageUploader } from '../services/image-uploader.js';
+import { templateManager, TemplateManager } from '../services/template-manager.js';
 import { router } from '../core/router.js';
 import { toast } from '../ui/toast.js';
 import { TagInput } from '../ui/components.js';
+import { createImageUploadZone } from '../ui/image-upload-zone.js';
 
 let tagInput = null;
+let imageUploadZone = null;
 let autoSaveTimeout = null;
+let activeTemplateCategory = 'recent';
 
 /**
  * 홈 페이지 렌더링
@@ -40,6 +45,9 @@ export function renderHomePage() {
             <p class="page-description">AI가 주제에 맞는 블로그 글을 자동으로 작성합니다</p>
           </div>
         </div>
+
+        <!-- 템플릿 선택 -->
+        ${renderTemplateSection()}
 
         <!-- 메인 폼 -->
         <form id="generate-form" class="generate-form">
@@ -105,6 +113,19 @@ export function renderHomePage() {
                   `).join('')}
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- 이미지 업로드 -->
+          <div class="card mt-4 collapsible" id="image-upload-card">
+            <div class="card-header collapsible-header">
+              <h2 class="card-title">이미지 (선택)</h2>
+              <button type="button" class="btn btn-ghost btn-sm toggle-collapse">
+                <span class="collapse-icon">▼</span>
+              </button>
+            </div>
+            <div class="card-body collapsible-content" style="display: none;">
+              <div id="image-upload-container"></div>
             </div>
           </div>
 
@@ -203,13 +224,22 @@ export function renderHomePage() {
 
   // 이벤트 바인딩
   bindHomeEvents();
+  bindTemplateEvents();
 
   // 태그 입력 초기화
   initTagInput(currentGeneration.keywords || []);
 
+  // 이미지 업로드 초기화
+  initImageUpload();
+
   // 추가 정보에 내용이 있으면 펼치기
   if (currentGeneration.additionalInfo || currentGeneration.referenceUrl) {
     toggleCollapsible(document.getElementById('additional-info-card'), true);
+  }
+
+  // 이미지가 있으면 펼치기
+  if (imageUploader.count > 0) {
+    toggleCollapsible(document.getElementById('image-upload-card'), true);
   }
 }
 
@@ -359,6 +389,30 @@ function initTagInput(initialTags) {
     onChange: (tags) => {
       updateCurrentGeneration({ keywords: tags });
       scheduleAutoSave();
+    }
+  });
+}
+
+/**
+ * 이미지 업로드 초기화
+ */
+function initImageUpload() {
+  const container = document.getElementById('image-upload-container');
+  if (!container) return;
+
+  // 기존 인스턴스 정리
+  if (imageUploadZone) {
+    imageUploadZone.destroy();
+  }
+
+  imageUploadZone = createImageUploadZone(container, {
+    onUpload: (image) => {
+      // 이미지 업로드 시 카드 펼치기
+      toggleCollapsible(document.getElementById('image-upload-card'), true);
+    },
+    onChange: (images) => {
+      // 이미지 변경 시 상태 업데이트
+      updateCurrentGeneration({ images: images.map(img => img.id) });
     }
   });
 }
@@ -552,4 +606,182 @@ function getStyleName(styleId) {
     story: '스토리형'
   };
   return styles[styleId] || styleId;
+}
+
+/**
+ * 템플릿 섹션 렌더링
+ */
+function renderTemplateSection() {
+  const categories = TemplateManager.getCategories();
+  const templates = templateManager.getByCategory(activeTemplateCategory);
+
+  return `
+    <div class="card template-section mb-4">
+      <div class="card-header">
+        <h2 class="card-title">템플릿으로 시작하기</h2>
+      </div>
+      <div class="card-body">
+        <!-- 카테고리 탭 -->
+        <div class="template-categories">
+          ${categories.map(cat => `
+            <button class="template-category-tab ${activeTemplateCategory === cat.id ? 'active' : ''}"
+                    data-category="${cat.id}">
+              ${cat.icon} ${cat.name}
+            </button>
+          `).join('')}
+        </div>
+
+        <!-- 템플릿 목록 -->
+        <div class="template-list">
+          ${templates.length > 0 ? templates.map(t => `
+            <div class="template-card" data-template-id="${t.id}">
+              <span class="template-emoji">${t.emoji}</span>
+              <div class="template-info">
+                <span class="template-name">${t.name}</span>
+                <span class="template-desc">${t.description}</span>
+              </div>
+              ${t.usageCount ? `<span class="template-usage">${t.usageCount}회</span>` : ''}
+            </div>
+          `).join('') : `
+            <div class="template-empty">
+              ${activeTemplateCategory === 'recent' ? '최근 사용한 템플릿이 없습니다' :
+                activeTemplateCategory === 'custom' ? '저장된 템플릿이 없습니다' :
+                '이 카테고리에 템플릿이 없습니다'}
+            </div>
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * 템플릿 이벤트 바인딩
+ */
+function bindTemplateEvents() {
+  // 카테고리 탭 클릭
+  document.querySelectorAll('.template-category-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      activeTemplateCategory = tab.dataset.category;
+      // 템플릿 섹션만 다시 렌더링
+      const templateSection = document.querySelector('.template-section');
+      if (templateSection) {
+        templateSection.outerHTML = renderTemplateSection();
+        bindTemplateEvents();
+      }
+    });
+  });
+
+  // 템플릿 카드 클릭
+  document.querySelectorAll('.template-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const templateId = card.dataset.templateId;
+      showTemplateModal(templateId);
+    });
+  });
+}
+
+/**
+ * 템플릿 적용 모달
+ */
+function showTemplateModal(templateId) {
+  const template = templateManager.get(templateId);
+  if (!template) return;
+
+  const hasVariables = template.variables && Object.keys(template.variables).length > 0;
+
+  // 변수가 없으면 바로 적용
+  if (!hasVariables) {
+    applyTemplate(templateId, {});
+    return;
+  }
+
+  // 변수 입력 모달 표시
+  const modalHtml = `
+    <div class="modal-overlay template-modal-overlay">
+      <div class="modal template-modal">
+        <div class="modal-header">
+          <h3>${template.emoji} ${template.name}</h3>
+          <button class="btn btn-ghost btn-sm modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">${template.description}</p>
+          <form id="template-form" class="template-variables-form">
+            ${Object.entries(template.variables).map(([key, v]) => `
+              <div class="input-group">
+                <label class="input-label">${v.label}</label>
+                <input type="text" class="input" name="${key}" placeholder="${v.placeholder || ''}" required>
+              </div>
+            `).join('')}
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary modal-close">취소</button>
+          <button class="btn btn-primary" id="apply-template-btn">적용하기</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  const overlay = document.querySelector('.template-modal-overlay');
+  const form = document.getElementById('template-form');
+
+  // 닫기 버튼
+  overlay.querySelectorAll('.modal-close').forEach(btn => {
+    btn.addEventListener('click', () => overlay.remove());
+  });
+
+  // 오버레이 클릭으로 닫기
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  // 적용 버튼
+  document.getElementById('apply-template-btn').addEventListener('click', () => {
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+
+    const formData = new FormData(form);
+    const variables = Object.fromEntries(formData);
+
+    overlay.remove();
+    applyTemplate(templateId, variables);
+  });
+
+  // 엔터키로 제출
+  form.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('apply-template-btn').click();
+    }
+  });
+
+  // 첫 번째 입력 필드에 포커스
+  form.querySelector('input')?.focus();
+}
+
+/**
+ * 템플릿 적용
+ */
+function applyTemplate(templateId, variables) {
+  try {
+    const applied = templateManager.apply(templateId, variables);
+
+    updateCurrentGeneration({
+      topic: applied.topic,
+      keywords: applied.keywords.filter(k => !k.includes('{{')), // 미치환 변수 제거
+      style: applied.style,
+      length: applied.length,
+      provider: applied.provider
+    });
+
+    toast.success(`"${applied.templateName}" 템플릿이 적용되었습니다`);
+    renderHomePage();
+  } catch (error) {
+    toast.error(error.message);
+  }
 }

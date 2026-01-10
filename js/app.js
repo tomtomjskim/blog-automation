@@ -16,6 +16,12 @@ import { renderResultPage } from './pages/result.js';
 import { renderSettingsPage } from './pages/settings.js';
 import { renderImagePage } from './pages/image.js';
 import { renderHistoryPage } from './pages/history.js';
+import { renderSchedulePage } from './pages/schedule.js';
+import { renderBatchPage } from './pages/batch.js';
+import { renderStatsPage } from './pages/stats.js';
+
+// Services
+import { postScheduler } from './services/scheduler.js';
 
 /**
  * 앱 초기화
@@ -38,6 +44,9 @@ async function bootstrap() {
   // 시스템 테마 변경 감지
   setupThemeWatcher();
 
+  // 예약 스케줄러 시작
+  postScheduler.start();
+
   // 라우터는 load 이벤트에서 자동으로 초기 라우팅 처리함
 
   console.log('✅ Blog Automation Ready');
@@ -53,6 +62,9 @@ function setupRouter() {
   router.register('settings', renderSettingsPage);
   router.register('image', renderImagePage);
   router.register('history', renderHistoryPage);
+  router.register('schedule', renderSchedulePage);
+  router.register('batch', renderBatchPage);
+  router.register('stats', renderStatsPage);
 
   // 404 처리
   router.setNotFound(() => {
@@ -213,7 +225,10 @@ async function showQuickActions() {
   const actions = [
     { label: '🏠 홈', action: () => router.navigate('home') },
     { label: '📝 새 글 생성', action: () => router.navigate('home') },
+    { label: '📦 대량 생성', action: () => router.navigate('batch') },
     { label: '🖼️ 이미지 생성', action: () => router.navigate('image') },
+    { label: '📅 예약 포스팅', action: () => router.navigate('schedule') },
+    { label: '📊 사용량 통계', action: () => router.navigate('stats') },
     { label: '📚 히스토리', action: () => router.navigate('history') },
     { label: '⚙️ 설정', action: () => router.navigate('settings') }
   ];

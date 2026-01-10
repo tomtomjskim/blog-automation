@@ -6,6 +6,7 @@
 import { llmService } from './llm-service.js';
 import { storage } from '../core/storage.js';
 import { eventBus, EVENT_TYPES } from '../core/events.js';
+import { usageTracker } from './usage-tracker.js';
 
 // 글 스타일별 시스템 프롬프트
 const STYLE_PROMPTS = {
@@ -130,6 +131,18 @@ class BlogGenerator {
     // 결과 파싱 및 반환
     const parsed = this.parseResult(result.content);
 
+    // 사용량 추적
+    usageTracker.record({
+      type: 'generation',
+      provider,
+      model: result.model || model,
+      inputTokens: result.usage?.inputTokens || 0,
+      outputTokens: result.usage?.outputTokens || 0,
+      cost: result.cost?.total || 0,
+      success: true,
+      metadata: { topic, style, length }
+    });
+
     return {
       ...result,
       ...parsed,
@@ -177,6 +190,19 @@ class BlogGenerator {
         yield chunk;
       } else if (chunk.type === 'done') {
         const parsed = this.parseResult(fullContent);
+
+        // 사용량 추적
+        usageTracker.record({
+          type: 'generation',
+          provider,
+          model: chunk.model || model,
+          inputTokens: chunk.usage?.inputTokens || 0,
+          outputTokens: chunk.usage?.outputTokens || 0,
+          cost: chunk.cost?.total || 0,
+          success: true,
+          metadata: { topic, style, length }
+        });
+
         yield {
           ...chunk,
           ...parsed,
@@ -301,6 +327,18 @@ ${blogContent.substring(0, 2000)}
     const result = await this.llmService.generateText(provider, prompt, {
       maxTokens: 300,
       temperature: 0.8
+    });
+
+    // 사용량 추적
+    usageTracker.record({
+      type: 'image',
+      provider,
+      model: result.model,
+      inputTokens: result.usage?.inputTokens || 0,
+      outputTokens: result.usage?.outputTokens || 0,
+      cost: result.cost?.total || 0,
+      success: true,
+      metadata: { type: 'image_prompt' }
     });
 
     return result.content.trim();

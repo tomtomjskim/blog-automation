@@ -6,6 +6,9 @@
 import { store, updateCurrentGeneration, setResult } from '../state.js';
 import { blogGenerator } from '../services/blog-generator.js';
 import { naverBlogService } from '../services/naver-blog.js';
+import { contentImageManager } from '../services/content-image-manager.js';
+import { imageUploader } from '../services/image-uploader.js';
+import { showScheduleModal } from './schedule.js';
 import { router } from '../core/router.js';
 import { toast } from '../ui/toast.js';
 import { modal } from '../ui/modal.js';
@@ -13,6 +16,7 @@ import { copyToClipboard } from '../ui/components.js';
 
 let isEditing = false;
 let editedContent = '';
+let imageInsertModalOpen = false;
 
 /**
  * 결과 페이지 렌더링
@@ -72,9 +76,31 @@ export function renderResultPage() {
                   <label class="input-label">제목</label>
                   <input type="text" class="input" id="edit-title" value="${escapeHtml(result.title)}">
                 </div>
-                <div class="input-group mt-4">
-                  <label class="input-label">본문</label>
-                  <textarea class="input edit-content" id="edit-content" rows="20">${escapeHtml(result.content)}</textarea>
+                <div class="editor-split mt-4">
+                  <div class="editor-pane">
+                    <div class="editor-pane-header">
+                      <span class="editor-pane-title">편집</span>
+                      <div class="editor-toolbar">
+                        <button type="button" class="btn btn-ghost btn-sm" id="insert-image-btn" title="이미지 삽입">
+                          🖼️ 이미지 삽입 ${imageUploader.count > 0 ? `(${imageUploader.count})` : ''}
+                        </button>
+                      </div>
+                      <span class="editor-char-count" id="char-count">${result.content.length}자</span>
+                    </div>
+                    <textarea class="input edit-content" id="edit-content">${escapeHtml(result.content)}</textarea>
+                  </div>
+                  <div class="preview-pane">
+                    <div class="preview-pane-header">
+                      <span class="preview-pane-title">미리보기</span>
+                      <label class="preview-style-toggle">
+                        <input type="checkbox" id="naver-style-toggle">
+                        <span>네이버 스타일</span>
+                      </label>
+                    </div>
+                    <div class="preview-content markdown-body" id="live-preview">
+                      ${renderMarkdown(result.content)}
+                    </div>
+                  </div>
                 </div>
                 <div class="edit-actions mt-4 flex justify-end gap-3">
                   <button class="btn btn-secondary" id="cancel-edit">취소</button>
@@ -166,6 +192,9 @@ export function renderResultPage() {
               <button class="btn btn-secondary" id="image-btn">
                 <span>🖼️</span> 이미지 생성
               </button>
+              <button class="btn btn-secondary" id="schedule-btn">
+                <span>📅</span> 예약하기
+              </button>
             </div>
           </div>
         </div>
@@ -241,6 +270,26 @@ function bindResultEvents() {
     renderResultPage();
   });
 
+  // 실시간 미리보기
+  const editContent = document.getElementById('edit-content');
+  const livePreview = document.getElementById('live-preview');
+  const charCount = document.getElementById('char-count');
+
+  if (editContent && livePreview) {
+    editContent.addEventListener('input', () => {
+      const content = editContent.value;
+      livePreview.innerHTML = renderMarkdown(content);
+      if (charCount) {
+        charCount.textContent = content.length + '자';
+      }
+    });
+
+    // 네이버 스타일 토글
+    document.getElementById('naver-style-toggle')?.addEventListener('change', (e) => {
+      livePreview.classList.toggle('naver-blog-style', e.target.checked);
+    });
+  }
+
   // 편집 취소
   document.getElementById('cancel-edit')?.addEventListener('click', () => {
     isEditing = false;
@@ -282,9 +331,32 @@ function bindResultEvents() {
   // 재생성
   document.getElementById('regenerate-btn')?.addEventListener('click', handleRegenerate);
 
-  // 이미지 생성
+  // 이미지 생성/추가 페이지
   document.getElementById('image-btn')?.addEventListener('click', () => {
     router.navigate('image');
+  });
+
+  // 이미지 삽입 버튼 (편집 모드)
+  document.getElementById('insert-image-btn')?.addEventListener('click', () => {
+    showImageInsertModal();
+  });
+
+  // 예약 포스팅
+  document.getElementById('schedule-btn')?.addEventListener('click', () => {
+    const result = store.get('result');
+    const { naverBlog } = store.getState();
+
+    if (!naverBlog.connected) {
+      toast.warning('먼저 네이버 블로그를 연동해주세요');
+      router.navigate('settings');
+      return;
+    }
+
+    showScheduleModal({
+      title: result.title,
+      content: result.content,
+      keywords: result.keywords || []
+    }, naverBlog.categories || []);
   });
 
   // 네이버 포스팅
@@ -364,7 +436,20 @@ async function handleNaverPost() {
  * 마크다운 렌더링 (간단한 버전)
  */
 function renderMarkdown(text) {
-  let html = escapeHtml(text);
+  // HTML 태그 (이미지 div 등)는 보존
+  const htmlBlocks = [];
+  let html = text.replace(/<div[\s\S]*?<\/div>/gi, (match) => {
+    htmlBlocks.push(match);
+    return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
+  });
+
+  // img 태그도 보존
+  html = html.replace(/<img[^>]*>/gi, (match) => {
+    htmlBlocks.push(match);
+    return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
+  });
+
+  html = escapeHtml(html);
 
   // 제목
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
@@ -374,6 +459,9 @@ function renderMarkdown(text) {
   // 굵게, 기울임
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // 마크다운 이미지 (![alt](src))
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; display: block; margin: 10px auto;">');
 
   // 링크
   html = html.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
@@ -388,6 +476,11 @@ function renderMarkdown(text) {
   // 줄바꿈
   html = html.replace(/\n\n/g, '</p><p>');
   html = html.replace(/\n/g, '<br>');
+
+  // HTML 블록 복원
+  html = html.replace(/__HTML_BLOCK_(\d+)__/g, (match, index) => {
+    return htmlBlocks[parseInt(index, 10)] || match;
+  });
 
   return `<p>${html}</p>`;
 }
@@ -456,4 +549,175 @@ function getStatusIcon(status) {
     info: 'ℹ️'
   };
   return icons[status] || '•';
+}
+
+/**
+ * 이미지 삽입 모달 표시
+ */
+function showImageInsertModal() {
+  const images = imageUploader.images;
+
+  // 이미지가 없으면 이미지 페이지로 이동 안내
+  if (images.length === 0) {
+    modal.confirm({
+      title: '업로드된 이미지 없음',
+      message: '삽입할 이미지가 없습니다.\n이미지를 먼저 업로드하시겠습니까?',
+      confirmText: '이미지 추가',
+      onConfirm: () => {
+        router.navigate('image');
+      }
+    });
+    return;
+  }
+
+  // 모달 생성
+  const modalEl = document.createElement('div');
+  modalEl.className = 'modal image-insert-modal';
+  modalEl.id = 'image-insert-modal';
+  modalEl.innerHTML = `
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">이미지 삽입</h2>
+        <button type="button" class="btn-close" id="close-image-modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="modal-description">삽입할 이미지를 선택하세요 (여러 개 선택 가능)</p>
+
+        <div class="image-select-grid" id="image-select-grid">
+          ${images.map((img, idx) => `
+            <div class="image-select-item" data-id="${img.id}" data-index="${idx}">
+              <img src="${img.thumbnail || img.base64}" alt="${escapeHtml(img.alt)}">
+              <div class="image-select-check">
+                <input type="checkbox" id="select-img-${idx}" data-id="${img.id}">
+                <label for="select-img-${idx}"></label>
+              </div>
+              <div class="image-select-name">${escapeHtml(img.alt || `이미지 ${idx + 1}`)}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="insert-options mt-4">
+          <div class="form-group">
+            <label class="input-label">삽입 위치</label>
+            <div class="radio-group">
+              <label class="radio-item">
+                <input type="radio" name="insert-position" class="radio-input" value="cursor" checked>
+                <span class="radio-label">커서 위치</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="insert-position" class="radio-input" value="headings">
+                <span class="radio-label">소제목 아래</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="insert-position" class="radio-input" value="end">
+                <span class="radio-label">글 끝</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group mt-3">
+            <label class="input-label">정렬</label>
+            <div class="btn-group-toggle">
+              <button type="button" class="btn btn-sm" data-align="left">좌측</button>
+              <button type="button" class="btn btn-sm active" data-align="center">중앙</button>
+              <button type="button" class="btn btn-sm" data-align="right">우측</button>
+            </div>
+          </div>
+
+          <div class="form-group mt-3">
+            <label class="checkbox-label">
+              <input type="checkbox" id="add-caption" checked>
+              <span>캡션 추가</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancel-insert">취소</button>
+        <button type="button" class="btn btn-primary" id="confirm-insert">삽입</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modalEl);
+  requestAnimationFrame(() => modalEl.classList.add('open'));
+
+  // 이벤트 바인딩
+  bindImageModalEvents(modalEl);
+}
+
+/**
+ * 이미지 모달 이벤트 바인딩
+ */
+function bindImageModalEvents(modalEl) {
+  // 닫기
+  const closeModal = () => {
+    modalEl.classList.remove('open');
+    setTimeout(() => modalEl.remove(), 200);
+  };
+
+  modalEl.querySelector('#close-image-modal').addEventListener('click', closeModal);
+  modalEl.querySelector('#cancel-insert').addEventListener('click', closeModal);
+  modalEl.querySelector('.modal-backdrop').addEventListener('click', closeModal);
+
+  // 이미지 선택 토글
+  modalEl.querySelectorAll('.image-select-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      const checkbox = item.querySelector('input[type="checkbox"]');
+      checkbox.checked = !checkbox.checked;
+      item.classList.toggle('selected', checkbox.checked);
+    });
+  });
+
+  // 정렬 버튼
+  modalEl.querySelectorAll('[data-align]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      modalEl.querySelectorAll('[data-align]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // 삽입 확정
+  modalEl.querySelector('#confirm-insert').addEventListener('click', () => {
+    const selectedIds = Array.from(modalEl.querySelectorAll('.image-select-item input:checked'))
+      .map(input => input.dataset.id);
+
+    if (selectedIds.length === 0) {
+      toast.warning('이미지를 선택해주세요');
+      return;
+    }
+
+    const position = modalEl.querySelector('input[name="insert-position"]:checked')?.value || 'cursor';
+    const align = modalEl.querySelector('[data-align].active')?.dataset.align || 'center';
+    const caption = modalEl.querySelector('#add-caption')?.checked ?? true;
+
+    // 에디터 설정
+    const textarea = document.getElementById('edit-content');
+    if (!textarea) {
+      toast.error('편집 모드에서만 삽입할 수 있습니다');
+      closeModal();
+      return;
+    }
+
+    contentImageManager.setEditor(textarea);
+
+    // 이미지 삽입
+    try {
+      const insertedCount = contentImageManager.insertMultiple(selectedIds, {
+        position,
+        align,
+        caption,
+        style: 'naver'
+      });
+
+      toast.success(`${insertedCount}개 이미지가 삽입되었습니다`);
+      closeModal();
+    } catch (error) {
+      toast.error(error.message || '이미지 삽입에 실패했습니다');
+    }
+  });
 }
