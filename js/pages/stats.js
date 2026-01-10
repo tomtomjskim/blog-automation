@@ -395,5 +395,3 @@ function getTypeLabel(type) {
   };
   return labels[type] || type;
 }
-
-export { renderStatsPage };
