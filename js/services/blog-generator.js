@@ -6,7 +6,7 @@
 import { llmService } from './llm-service.js';
 import { storage } from '../core/storage.js';
 import { eventBus, EVENT_TYPES } from '../core/events.js';
-import { usageTracker } from './usage-tracker.js';
+import { buildFoodReviewPrompt } from './food-review-helper.js';
 
 // 글 스타일별 시스템 프롬프트
 const STYLE_PROMPTS = {
@@ -78,7 +78,35 @@ const STYLE_PROMPTS = {
 금지:
 - 단조로운 나열
 - 감정 과잉
-- 현실성 없는 전개`
+- 현실성 없는 전개`,
+
+  food_review: `당신은 음식과 맛집을 생생하게 표현하는 전문 푸드 블로거입니다.
+
+특징:
+- 5감을 활용한 감각적 맛 표현 (식감, 향, 온도, 비주얼, 소리)
+- 구체적인 맛 묘사 ("고소한 참기름 향이 입안 가득", "겉바속촉의 완벽한 튀김")
+- 메뉴별 상세 평가 및 추천
+- 가격 대비 만족도 솔직한 평가
+- 실용 정보 필수 포함 (주차, 웨이팅, 예약, 브레이크타임)
+
+필수 포함 정보:
+- ⭐ 총점 (5점 만점, 맛/서비스/분위기/가성비 세부 평가)
+- 💰 1인 예상 비용
+- 📍 위치 및 찾아가는 방법
+- 🅿️ 주차 정보
+- ⏰ 영업시간 및 브레이크타임
+- 📱 예약 가능 여부
+- 👥 추천 인원/상황 (데이트, 가족모임, 혼밥 등)
+
+사진 가이드:
+- [사진1: 가게 외관] 형태로 사진 위치 표시
+- 메뉴 사진은 각도, 조명, 구도 팁 포함
+
+금지:
+- "최고의", "역대급", "미쳤다" 등 과장된 표현
+- 확인되지 않은 영업정보
+- 무조건적인 칭찬만 (단점도 솔직하게)
+- 광고성/협찬 느낌의 문체`
 };
 
 // 글 길이 설정
@@ -105,7 +133,8 @@ class BlogGenerator {
       additionalInfo = '',
       referenceUrl = '',
       provider = 'anthropic',
-      model
+      model,
+      foodReviewOptions = null  // 음식 리뷰 전용 옵션
     } = input;
 
     // 시스템 프롬프트 (스타일별)
@@ -117,7 +146,9 @@ class BlogGenerator {
       keywords,
       length,
       additionalInfo,
-      referenceUrl
+      referenceUrl,
+      style,
+      foodReviewOptions
     });
 
     // LLM 호출
@@ -130,18 +161,6 @@ class BlogGenerator {
 
     // 결과 파싱 및 반환
     const parsed = this.parseResult(result.content);
-
-    // 사용량 추적
-    usageTracker.record({
-      type: 'generation',
-      provider,
-      model: result.model || model,
-      inputTokens: result.usage?.inputTokens || 0,
-      outputTokens: result.usage?.outputTokens || 0,
-      cost: result.cost?.total || 0,
-      success: true,
-      metadata: { topic, style, length }
-    });
 
     return {
       ...result,
@@ -165,7 +184,8 @@ class BlogGenerator {
       additionalInfo = '',
       referenceUrl = '',
       provider = 'anthropic',
-      model
+      model,
+      foodReviewOptions = null  // 음식 리뷰 전용 옵션
     } = input;
 
     const systemPrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.casual;
@@ -174,7 +194,9 @@ class BlogGenerator {
       keywords,
       length,
       additionalInfo,
-      referenceUrl
+      referenceUrl,
+      style,
+      foodReviewOptions
     });
 
     let fullContent = '';
@@ -191,18 +213,6 @@ class BlogGenerator {
       } else if (chunk.type === 'done') {
         const parsed = this.parseResult(fullContent);
 
-        // 사용량 추적
-        usageTracker.record({
-          type: 'generation',
-          provider,
-          model: chunk.model || model,
-          inputTokens: chunk.usage?.inputTokens || 0,
-          outputTokens: chunk.usage?.outputTokens || 0,
-          cost: chunk.cost?.total || 0,
-          success: true,
-          metadata: { topic, style, length }
-        });
-
         yield {
           ...chunk,
           ...parsed,
@@ -218,8 +228,21 @@ class BlogGenerator {
   /**
    * 프롬프트 생성
    */
-  buildPrompt({ topic, keywords, length, additionalInfo, referenceUrl }) {
+  buildPrompt({ topic, keywords, length, additionalInfo, referenceUrl, style, foodReviewOptions }) {
     const lengthGuide = LENGTH_CONFIG[length]?.label || '약 1000자 내외';
+
+    // 음식 리뷰 스타일인 경우 전용 프롬프트 빌더 사용
+    if (style === 'food_review') {
+      return this.buildFoodReviewPromptWrapper({
+        topic,
+        keywords,
+        length,
+        lengthGuide,
+        additionalInfo,
+        referenceUrl,
+        foodReviewOptions
+      });
+    }
 
     let prompt = `다음 조건으로 네이버 블로그 글을 작성해주세요.
 
@@ -254,6 +277,97 @@ ${referenceUrl}
 3. 키워드를 자연스럽게 포함 (SEO 고려)
 4. 네이버 블로그에 바로 복사해서 사용할 수 있는 형태로 작성
 5. 마크다운 형식 유지
+
+글을 작성해주세요:`;
+
+    return prompt;
+  }
+
+  /**
+   * 음식 리뷰 전용 프롬프트 래퍼
+   */
+  buildFoodReviewPromptWrapper({ topic, keywords, length, lengthGuide, additionalInfo, referenceUrl, foodReviewOptions }) {
+    // foodReviewOptions가 있으면 전용 빌더 사용
+    if (foodReviewOptions && foodReviewOptions.restaurantName) {
+      const fullPrompt = buildFoodReviewPrompt({
+        ...foodReviewOptions,
+        additionalNotes: additionalInfo
+      });
+
+      return `${fullPrompt}
+
+## 글 길이
+${lengthGuide}
+
+## 작성 형식
+1. 제목을 # 마크다운으로 먼저 작성
+2. 소제목은 ## 마크다운으로 구조화
+3. 마크다운 형식 유지
+4. 사진 위치는 [사진: 설명] 형태로 표시`;
+    }
+
+    // 기본 음식 리뷰 프롬프트 (간소화 버전)
+    let prompt = `다음 조건으로 음식점 리뷰 블로그 글을 작성해주세요.
+
+## 음식점/메뉴 정보
+${topic}
+
+## 키워드
+${keywords.length > 0 ? keywords.join(', ') : '(음식점명, 메뉴명, 위치 등에서 자동 추출)'}
+
+## 글 길이
+${lengthGuide}
+`;
+
+    if (additionalInfo) {
+      prompt += `
+## 추가 정보 (맛, 분위기, 가격 등)
+${additionalInfo}
+`;
+    }
+
+    if (referenceUrl) {
+      prompt += `
+## 참고 URL (네이버 플레이스, 인스타 등)
+${referenceUrl}
+`;
+    }
+
+    prompt += `
+## 음식 리뷰 필수 포함사항
+1. **총평 및 별점** (5점 만점)
+   - 맛: ⭐⭐⭐⭐⭐
+   - 서비스: ⭐⭐⭐⭐
+   - 분위기: ⭐⭐⭐⭐
+   - 가성비: ⭐⭐⭐⭐
+
+2. **맛 표현** (5감 활용)
+   - 식감, 향, 온도, 비주얼 등 구체적 묘사
+   - "겉바속촉", "불향이 배인", "입안 가득 퍼지는" 등
+
+3. **실용 정보**
+   - 💰 1인 예상 비용
+   - 📍 위치/찾아가는 방법
+   - 🅿️ 주차 정보
+   - ⏰ 영업시간
+   - 📱 예약 가능 여부
+   - 👥 추천 상황 (데이트/가족/혼밥 등)
+
+4. **사진 배치**
+   - [사진: 가게 외관]
+   - [사진: 대표 메뉴]
+   - [사진: 음식 클로즈업]
+   - [사진: 내부 분위기]
+
+## 작성 형식
+1. 제목을 # 마크다운으로 먼저 작성
+2. 소제목은 ## 마크다운으로 구조화
+3. 마크다운 형식 유지
+
+## 주의사항
+- 과장된 표현 자제 ("인생맛집", "역대급" 등)
+- 확인되지 않은 정보는 "확인 필요"로 표시
+- 장점과 단점 균형있게 서술
 
 글을 작성해주세요:`;
 
@@ -327,18 +441,6 @@ ${blogContent.substring(0, 2000)}
     const result = await this.llmService.generateText(provider, prompt, {
       maxTokens: 300,
       temperature: 0.8
-    });
-
-    // 사용량 추적
-    usageTracker.record({
-      type: 'image',
-      provider,
-      model: result.model,
-      inputTokens: result.usage?.inputTokens || 0,
-      outputTokens: result.usage?.outputTokens || 0,
-      cost: result.cost?.total || 0,
-      success: true,
-      metadata: { type: 'image_prompt' }
     });
 
     return result.content.trim();
@@ -452,6 +554,7 @@ ${blogContent.substring(0, 2000)}
       { id: 'casual', name: '일상형', icon: '💬', description: '친근하고 캐주얼한 문체' },
       { id: 'informative', name: '정보형', icon: '📚', description: '체계적이고 상세한 정보' },
       { id: 'review', name: '리뷰형', icon: '⭐', description: '균형 잡힌 평가와 추천' },
+      { id: 'food_review', name: '맛집리뷰', icon: '🍽️', description: '음식점/카페 전문 리뷰' },
       { id: 'marketing', name: '마케팅형', icon: '🎯', description: '홍보와 판매 유도' },
       { id: 'story', name: '스토리형', icon: '📖', description: '몰입감 있는 이야기체' }
     ];

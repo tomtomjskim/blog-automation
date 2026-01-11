@@ -37,14 +37,13 @@ export function renderResultPage() {
       <div class="container container-md">
         <!-- 헤더 -->
         <div class="page-header">
-          <button class="btn btn-ghost" onclick="window.location.hash='home'">
-            ← 뒤로
-          </button>
-          <div class="page-header-actions">
-            <button class="btn btn-ghost" onclick="window.location.hash='history'">
-              히스토리
-            </button>
+          <div class="page-header-content">
+            <h1 class="page-title">📄 생성 결과</h1>
+            <p class="page-description">생성된 글을 확인하고 편집하세요</p>
           </div>
+          <button class="btn btn-ghost" onclick="window.location.hash='history'">
+            📚 히스토리
+          </button>
         </div>
 
         <!-- 생성 정보 -->

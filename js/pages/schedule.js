@@ -24,7 +24,7 @@ export function renderSchedulePage() {
         <!-- 헤더 -->
         <div class="page-header">
           <div class="page-header-content">
-            <h1 class="page-title">예약 포스팅</h1>
+            <h1 class="page-title">📅 예약 포스팅</h1>
             <p class="page-description">글을 원하는 시간에 자동으로 발행합니다</p>
           </div>
         </div>

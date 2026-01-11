@@ -1,14 +1,15 @@
 /**
- * Blog Automation - Home Page
- * 메인 글 생성 페이지
+ * Blog Automation - Write Page
+ * 새 글 생성 페이지
  */
 
-import { store, updateCurrentGeneration, startLoading, stopLoading, setError, setResult, saveDraft } from '../state.js';
+import { store, updateCurrentGeneration, startLoading, stopLoading, setError, setResult, saveDraft, deleteDraft } from '../state.js';
 import { blogGenerator } from '../services/blog-generator.js';
 import { imageUploader } from '../services/image-uploader.js';
 import { templateManager, TemplateManager } from '../services/template-manager.js';
 import { router } from '../core/router.js';
 import { toast } from '../ui/toast.js';
+import { modal } from '../ui/modal.js';
 import { TagInput } from '../ui/components.js';
 import { createImageUploadZone } from '../ui/image-upload-zone.js';
 import { showLLMSettingsModal, renderLLMIndicator } from '../ui/llm-settings-modal.js';
@@ -19,9 +20,9 @@ let autoSaveTimeout = null;
 let activeTemplateCategory = 'recent';
 
 /**
- * 홈 페이지 렌더링
+ * 글 작성 페이지 렌더링
  */
-export function renderHomePage() {
+export function renderWritePage() {
   const app = document.getElementById('app');
   const { currentGeneration, settings, apiKeys } = store.getState();
 
@@ -34,7 +35,7 @@ export function renderHomePage() {
   const lengths = blogGenerator.getLengthOptions();
 
   app.innerHTML = `
-    <div class="home-page">
+    <div class="write-page">
       <div class="container container-md">
         <!-- 헤더 -->
         <div class="page-header">
@@ -180,7 +181,7 @@ export function renderHomePage() {
   `;
 
   // 이벤트 바인딩
-  bindHomeEvents();
+  bindWriteEvents();
   bindTemplateEvents();
 
   // 태그 입력 초기화
@@ -241,7 +242,7 @@ function renderDraftsSection() {
 /**
  * 이벤트 바인딩
  */
-function bindHomeEvents() {
+function bindWriteEvents() {
   const form = document.getElementById('generate-form');
 
   // 폼 제출
@@ -275,7 +276,7 @@ function bindHomeEvents() {
         // 새 인디케이터에 이벤트 재바인딩
         document.getElementById('change-llm-btn')?.addEventListener('click', () => {
           showLLMSettingsModal(() => {
-            renderHomePage();
+            renderWritePage();
           });
         });
       }
@@ -293,9 +294,6 @@ function bindHomeEvents() {
   // 입력 필드 자동 저장
   ['topic', 'reference-url', 'additional-info'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', (e) => {
-      const key = id.replace('-', '').replace('url', 'Url').replace('info', 'Info')
-        .replace('additionalInfo', 'additionalInfo').replace('referenceUrl', 'referenceUrl');
-
       const stateKey = id === 'topic' ? 'topic' :
                        id === 'reference-url' ? 'referenceUrl' : 'additionalInfo';
 
@@ -486,26 +484,22 @@ function handleRestoreDraft(id) {
     });
 
     toast.success('초안이 복원되었습니다');
-    renderHomePage();
+    renderWritePage();
   }
 }
 
 /**
  * 초안 삭제
  */
-import { deleteDraft } from '../state.js';
-
 function handleDeleteDraft(id) {
   deleteDraft(id);
   toast.success('초안이 삭제되었습니다');
-  renderHomePage();
+  renderWritePage();
 }
 
 /**
  * 전체 초안 삭제
  */
-import { modal } from '../ui/modal.js';
-
 async function handleClearDrafts() {
   const confirmed = await modal.confirm({
     title: '초안 전체 삭제',
@@ -518,7 +512,7 @@ async function handleClearDrafts() {
     const { drafts } = store.getState();
     drafts.forEach(d => deleteDraft(d.id));
     toast.success('모든 초안이 삭제되었습니다');
-    renderHomePage();
+    renderWritePage();
   }
 }
 
@@ -727,7 +721,7 @@ function applyTemplate(templateId, variables) {
     });
 
     toast.success(`"${applied.templateName}" 템플릿이 적용되었습니다`);
-    renderHomePage();
+    renderWritePage();
   } catch (error) {
     toast.error(error.message);
   }

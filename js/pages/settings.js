@@ -26,10 +26,10 @@ export function renderSettingsPage() {
       <div class="container container-md">
         <!-- 헤더 -->
         <div class="page-header">
-          <button class="btn btn-ghost" onclick="window.location.hash='home'">
-            ← 뒤로
-          </button>
-          <h1 class="page-title">설정</h1>
+          <div class="page-header-content">
+            <h1 class="page-title">⚙️ 설정</h1>
+            <p class="page-description">API 키와 앱 환경을 설정하세요</p>
+          </div>
         </div>
 
         <!-- 잠금 상태 확인 -->
@@ -46,6 +46,62 @@ export function renderSettingsPage() {
  * 잠금 화면 렌더링
  */
 function renderLockScreen() {
+  const hasExistingPassword = secureStorage.hasStoredData();
+
+  // 첫 사용자 온보딩 화면
+  if (!hasExistingPassword) {
+    return `
+      <div class="card">
+        <div class="card-body">
+          <div class="lock-screen onboarding">
+            <div class="lock-icon">🔐</div>
+            <h2 class="lock-title">API 키 보호하기</h2>
+            <p class="lock-desc">
+              마스터 비밀번호를 설정하면 API 키가 암호화되어<br>
+              안전하게 보관됩니다.
+            </p>
+
+            <div class="onboarding-benefits mt-4">
+              <div class="benefit-item">
+                <span class="benefit-icon">🔒</span>
+                <span class="benefit-text">AES-256 암호화로 안전하게 저장</span>
+              </div>
+              <div class="benefit-item">
+                <span class="benefit-icon">🛡️</span>
+                <span class="benefit-text">브라우저 종료 후에도 암호화 유지</span>
+              </div>
+              <div class="benefit-item">
+                <span class="benefit-icon">⚡</span>
+                <span class="benefit-text">한 번 설정으로 모든 API 키 보호</span>
+              </div>
+            </div>
+
+            <form id="setup-password-form" class="mt-6">
+              <div class="input-group">
+                <label class="input-label">새 비밀번호</label>
+                <input type="password" class="input" id="new-password"
+                  placeholder="비밀번호 입력 (최소 4자)" autocomplete="new-password" minlength="4">
+              </div>
+              <div class="input-group mt-3">
+                <label class="input-label">비밀번호 확인</label>
+                <input type="password" class="input" id="confirm-password"
+                  placeholder="비밀번호 다시 입력" autocomplete="new-password">
+              </div>
+              <button type="submit" class="btn btn-primary btn-lg w-full mt-4">
+                🔐 비밀번호 설정하기
+              </button>
+            </form>
+
+            <button type="button" class="btn btn-ghost w-full mt-2" id="skip-security">
+              나중에 설정하기
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // 기존 사용자 잠금 해제 화면
   return `
     <div class="card">
       <div class="card-body">
@@ -62,7 +118,6 @@ function renderLockScreen() {
               잠금 해제
             </button>
           </form>
-          <p class="lock-hint mt-4">처음 사용하시면 새 비밀번호를 설정합니다</p>
         </div>
       </div>
     </div>
@@ -142,6 +197,26 @@ function renderApiKeysTab(apiKeys) {
     }
   ];
 
+  // 검색 API 설정
+  const searchApis = [
+    {
+      id: 'serperApiKey',
+      name: 'Serper',
+      icon: '🔍',
+      desc: 'Google 검색 API (팩트체크, 최신 정보 수집)',
+      link: 'https://serper.dev/',
+      limits: '무료: 2,500 쿼리/월'
+    },
+    {
+      id: 'tavilyApiKey',
+      name: 'Tavily',
+      icon: '🌐',
+      desc: 'AI 검색 API (요약 기능 포함)',
+      link: 'https://tavily.com/',
+      limits: '무료: 1,000 쿼리/월'
+    }
+  ];
+
   return `
     <div class="card">
       <div class="card-header">
@@ -150,6 +225,8 @@ function renderApiKeysTab(apiKeys) {
       </div>
       <div class="card-body">
         <form id="api-keys-form">
+          <!-- LLM API 키 섹션 -->
+          <h3 class="section-title">AI 모델 API</h3>
           ${providers.map(provider => `
             <div class="api-key-item">
               <div class="api-key-header">
@@ -177,6 +254,43 @@ function renderApiKeysTab(apiKeys) {
               </div>
             </div>
           `).join('')}
+
+          <!-- 검색 API 키 섹션 -->
+          <div class="search-api-section">
+            <div class="search-api-header">
+              <h4>검색 API</h4>
+              <span class="search-api-badge">팩트체크</span>
+            </div>
+            <p class="card-desc mb-4">최신 정보 수집 및 팩트체크 기능을 사용하려면 검색 API를 설정하세요.</p>
+
+            <div class="search-api-cards">
+              ${searchApis.map(api => `
+                <div class="search-api-card">
+                  <div class="search-api-card-header">
+                    <span class="search-api-name">${api.icon} ${api.name}</span>
+                    <span class="search-api-status ${apiKeys[api.id] ? 'active' : 'inactive'}">
+                      ${apiKeys[api.id] ? '활성' : '비활성'}
+                    </span>
+                  </div>
+                  <div class="search-api-desc">${api.desc}</div>
+                  <div class="search-api-limits">${api.limits}</div>
+                  <div class="api-key-input-wrapper">
+                    <input type="password"
+                      class="input api-key-input"
+                      id="api-${api.id}"
+                      placeholder="${apiKeys[api.id] ? '••••••••••••••••' : 'API 키 입력'}"
+                      data-provider="${api.id}">
+                    <button type="button" class="btn btn-ghost btn-sm toggle-visibility" data-target="api-${api.id}">
+                      👁
+                    </button>
+                    <a href="${api.link}" target="_blank" class="btn btn-ghost btn-sm" title="API 키 발급">
+                      🔗
+                    </a>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
 
           <div class="form-actions mt-6">
             <button type="button" class="btn btn-secondary" id="test-api-keys">
@@ -465,6 +579,12 @@ function bindSettingsEvents() {
   // 잠금 해제
   document.getElementById('unlock-form')?.addEventListener('submit', handleUnlock);
 
+  // 새 비밀번호 설정 (온보딩)
+  document.getElementById('setup-password-form')?.addEventListener('submit', handleSetupPassword);
+
+  // 보안 설정 스킵
+  document.getElementById('skip-security')?.addEventListener('click', handleSkipSecurity);
+
   // API 키 저장
   document.getElementById('api-keys-form')?.addEventListener('submit', handleSaveApiKeys);
 
@@ -528,6 +648,53 @@ async function handleUnlock(e) {
   } catch (error) {
     toast.error('비밀번호가 올바르지 않습니다');
   }
+}
+
+/**
+ * 새 비밀번호 설정 핸들러 (온보딩)
+ */
+async function handleSetupPassword(e) {
+  e.preventDefault();
+
+  const newPassword = document.getElementById('new-password').value;
+  const confirmPassword = document.getElementById('confirm-password').value;
+
+  if (!newPassword || !confirmPassword) {
+    toast.error('비밀번호를 입력하세요');
+    return;
+  }
+
+  if (newPassword.length < 4) {
+    toast.error('비밀번호는 최소 4자 이상이어야 합니다');
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    toast.error('비밀번호가 일치하지 않습니다');
+    return;
+  }
+
+  try {
+    // 빈 API 키로 초기화 및 암호화
+    const emptyKeys = {};
+    await secureStorage.saveSecure(emptyKeys, newPassword);
+
+    store.setState({ unlocked: true });
+    toast.success('비밀번호가 설정되었습니다! 이제 API 키를 안전하게 저장할 수 있습니다.');
+    renderSettingsPage();
+  } catch (error) {
+    toast.error('비밀번호 설정에 실패했습니다');
+    console.error('Setup password error:', error);
+  }
+}
+
+/**
+ * 보안 설정 스킵 핸들러
+ */
+function handleSkipSecurity() {
+  store.setState({ unlocked: true });
+  toast.info('보안 설정을 건너뛰었습니다. 나중에 설정에서 활성화할 수 있습니다.');
+  renderSettingsPage();
 }
 
 /**

@@ -36,7 +36,7 @@ export function renderBatchPage() {
         <!-- 헤더 -->
         <div class="page-header">
           <div class="page-header-content">
-            <h1 class="page-title">대량 생성</h1>
+            <h1 class="page-title">📦 대량 생성</h1>
             <p class="page-description">여러 글을 한 번에 생성합니다 (최대 ${MAX_ITEMS}개)</p>
           </div>
         </div>

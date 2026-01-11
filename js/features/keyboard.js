@@ -32,14 +32,14 @@ class KeyboardManager {
   registerDefaultShortcuts() {
     // 전역 단축키
     this.register('ctrl+enter', '글 생성', () => {
-      if (store.get('currentPage') === 'home') {
+      if (store.get('currentPage') === 'write') {
         document.getElementById('generate-btn')?.click();
       }
     }, { global: true });
 
     this.register('ctrl+s', '저장', () => {
       const page = store.get('currentPage');
-      if (page === 'home') {
+      if (page === 'write') {
         document.getElementById('save-draft-btn')?.click();
       } else if (page === 'settings') {
         document.getElementById('save-general-settings')?.click();
@@ -81,6 +81,10 @@ class KeyboardManager {
     // 네비게이션 단축키
     this.register('g h', '홈으로 이동', () => {
       router.navigate('home');
+    });
+
+    this.register('g w', '새 글 작성', () => {
+      router.navigate('write');
     });
 
     this.register('g r', '결과로 이동', () => {
@@ -215,25 +219,34 @@ class KeyboardManager {
    * 빠른 네비게이션 표시
    */
   showQuickNavigation() {
+    // 키보드 매니저 비활성화 (이벤트 충돌 방지)
+    this.setEnabled(false);
+
     const pages = [
-      { key: 'h', label: '홈', icon: '🏠', route: 'home' },
-      { key: 'r', label: '결과', icon: '📄', route: 'result' },
-      { key: 'i', label: '이미지', icon: '🖼️', route: 'image' },
-      { key: 'y', label: '히스토리', icon: '📚', route: 'history' },
-      { key: 's', label: '설정', icon: '⚙️', route: 'settings' }
+      { label: '홈', icon: '🏠', route: 'home' },
+      { label: '새 글', icon: '✏️', route: 'write' },
+      { label: '예약', icon: '📅', route: 'schedule' },
+      { label: '기록', icon: '📚', route: 'history' },
+      { label: '설정', icon: '⚙️', route: 'settings' }
     ];
+
+    let selectedIndex = 0;
 
     const content = `
       <div class="quick-nav">
-        <input type="text" class="input quick-nav-search" placeholder="페이지 검색..." autofocus>
         <div class="quick-nav-list">
-          ${pages.map(p => `
-            <button class="quick-nav-item" data-route="${p.route}">
+          ${pages.map((p, i) => `
+            <button class="quick-nav-item ${i === 0 ? 'selected' : ''}" data-route="${p.route}" data-index="${i}">
+              <span class="quick-nav-number">${i + 1}</span>
               <span class="quick-nav-icon">${p.icon}</span>
               <span class="quick-nav-label">${p.label}</span>
-              <span class="quick-nav-key">${p.key.toUpperCase()}</span>
             </button>
           `).join('')}
+        </div>
+        <div class="quick-nav-hint">
+          <span>↑↓ 이동</span>
+          <span>Enter 선택</span>
+          <span>1-5 직접이동</span>
         </div>
       </div>
     `;
@@ -241,45 +254,70 @@ class KeyboardManager {
     const modalEl = modal.open({
       title: '빠른 이동',
       content,
-      size: 'sm'
+      size: 'sm',
+      onClose: () => {
+        this.setEnabled(true);
+      }
     });
 
-    // 검색 기능
-    const searchInput = modalEl.querySelector('.quick-nav-search');
-    const items = modalEl.querySelectorAll('.quick-nav-item');
+    const items = Array.from(modalEl.querySelectorAll('.quick-nav-item'));
 
-    searchInput?.addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase();
-      items.forEach(item => {
-        const label = item.querySelector('.quick-nav-label').textContent.toLowerCase();
-        item.style.display = label.includes(query) ? '' : 'none';
-      });
-    });
+    // 선택 상태 업데이트
+    const updateSelection = (newIndex) => {
+      selectedIndex = Math.max(0, Math.min(newIndex, items.length - 1));
+      items.forEach(item => item.classList.remove('selected'));
+      items[selectedIndex]?.classList.add('selected');
+    };
 
-    // 키보드 네비게이션
-    searchInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const visibleItem = modalEl.querySelector('.quick-nav-item:not([style*="display: none"])');
-        if (visibleItem) {
+    // 키보드 핸들러
+    const handleKeyDown = (e) => {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          updateSelection(selectedIndex + 1);
+          break;
+
+        case 'ArrowUp':
+          e.preventDefault();
+          updateSelection(selectedIndex - 1);
+          break;
+
+        case 'Enter':
+          e.preventDefault();
           modal.close();
-          router.navigate(visibleItem.dataset.route);
-        }
-      }
+          router.navigate(pages[selectedIndex].route);
+          break;
 
-      // 단축키로 직접 이동
-      const page = pages.find(p => p.key === e.key.toLowerCase());
-      if (page && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        modal.close();
-        router.navigate(page.route);
+        case 'Escape':
+          e.preventDefault();
+          modal.close();
+          break;
+
+        case '1': case '2': case '3': case '4': case '5':
+          const index = parseInt(e.key) - 1;
+          if (index < pages.length) {
+            e.preventDefault();
+            modal.close();
+            router.navigate(pages[index].route);
+          }
+          break;
       }
-    });
+    };
+
+    // 모달 전체에 키보드 이벤트 바인딩
+    modalEl.addEventListener('keydown', handleKeyDown);
+    modalEl.setAttribute('tabindex', '0');
+    modalEl.focus();
 
     // 클릭 이동
-    items.forEach(item => {
+    items.forEach((item, i) => {
       item.addEventListener('click', () => {
         modal.close();
-        router.navigate(item.dataset.route);
+        router.navigate(pages[i].route);
+      });
+
+      item.addEventListener('mouseenter', () => {
+        updateSelection(i);
       });
     });
   }
@@ -302,6 +340,7 @@ class KeyboardManager {
       ],
       '네비게이션': [
         ['G → H', '홈으로 이동'],
+        ['G → W', '새 글 작성'],
         ['G → R', '결과로 이동'],
         ['G → I', '이미지 생성'],
         ['G → S', '설정으로 이동']

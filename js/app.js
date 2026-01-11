@@ -9,25 +9,32 @@ import { eventBus, EVENT_TYPES } from './core/events.js';
 import { secureStorage } from './core/crypto.js';
 import { toast } from './ui/toast.js';
 import { modal } from './ui/modal.js';
+import { initAppLayout, updateActiveNav } from './ui/app-layout.js';
 
 // Pages
-import { renderHomePage } from './pages/home.js';
+import { renderLandingPage } from './pages/landing.js';
+import { renderWritePage } from './pages/write.js';
 import { renderResultPage } from './pages/result.js';
 import { renderSettingsPage } from './pages/settings.js';
 import { renderImagePage } from './pages/image.js';
 import { renderHistoryPage } from './pages/history.js';
 import { renderSchedulePage } from './pages/schedule.js';
 import { renderBatchPage } from './pages/batch.js';
-import { renderStatsPage } from './pages/stats.js';
 
 // Services
 import { postScheduler } from './services/scheduler.js';
+
+// Features
+import { keyboardManager } from './features/keyboard.js';
 
 /**
  * 앱 초기화
  */
 async function bootstrap() {
   console.log('🚀 Blog Automation Starting...');
+
+  // 앱 레이아웃 초기화 (헤더, 사이드바, 바텀 네비)
+  initAppLayout();
 
   // 라우터 설정
   setupRouter();
@@ -57,14 +64,14 @@ async function bootstrap() {
  */
 function setupRouter() {
   // 페이지 라우트 등록
-  router.register('home', renderHomePage);
+  router.register('home', renderLandingPage);
+  router.register('write', renderWritePage);
   router.register('result', renderResultPage);
   router.register('settings', renderSettingsPage);
   router.register('image', renderImagePage);
   router.register('history', renderHistoryPage);
   router.register('schedule', renderSchedulePage);
   router.register('batch', renderBatchPage);
-  router.register('stats', renderStatsPage);
 
   // 404 처리
   router.setNotFound(() => {
@@ -76,7 +83,7 @@ function setupRouter() {
     // result 페이지는 결과가 있어야 접근 가능
     if (to.path === 'result' && !store.get('result')) {
       toast.warning('먼저 글을 생성해주세요');
-      return 'home';
+      return 'write';
     }
     return true;
   });
@@ -88,6 +95,9 @@ function setupRouter() {
 
     // 현재 페이지 상태 업데이트
     store.setState({ currentPage: to.path });
+
+    // 네비게이션 활성 상태 업데이트
+    updateActiveNav();
   });
 }
 
@@ -144,120 +154,21 @@ function setupGlobalListeners() {
       });
     }
   });
+
+  // 앱 레이아웃에서 퀵 액션 요청
+  document.addEventListener('show-quick-actions', () => {
+    keyboardManager.showQuickNavigation();
+  });
 }
 
 /**
  * 키보드 단축키 설정
  */
 function setupKeyboardShortcuts() {
-  document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + Key 조합
-    if (e.ctrlKey || e.metaKey) {
-      switch (e.key.toLowerCase()) {
-        case 'enter':
-          // Ctrl+Enter: 글 생성
-          if (store.get('currentPage') === 'home') {
-            e.preventDefault();
-            document.getElementById('generate-btn')?.click();
-          }
-          break;
-
-        case 's':
-          // Ctrl+S: 저장 (초안 또는 설정)
-          e.preventDefault();
-          handleSaveShortcut();
-          break;
-
-        case 'k':
-          // Ctrl+K: 검색 또는 퀵 액션
-          e.preventDefault();
-          showQuickActions();
-          break;
-
-        case ',':
-          // Ctrl+,: 설정
-          e.preventDefault();
-          router.navigate('settings');
-          break;
-      }
-    }
-
-    // ESC: 모달 닫기 또는 뒤로가기
-    if (e.key === 'Escape') {
-      const activeModal = document.querySelector('.modal-overlay[style*="flex"]');
-      if (!activeModal) {
-        // 모달이 없으면 홈으로
-        const currentPage = store.get('currentPage');
-        if (currentPage !== 'home') {
-          router.navigate('home');
-        }
-      }
-    }
-  });
+  // 키보드 매니저 초기화 (모든 단축키 처리)
+  keyboardManager.init();
 }
 
-/**
- * 저장 단축키 핸들러
- */
-function handleSaveShortcut() {
-  const currentPage = store.get('currentPage');
-
-  switch (currentPage) {
-    case 'home':
-      // 초안 저장
-      document.getElementById('save-draft-btn')?.click();
-      break;
-    case 'settings':
-      // 설정 저장
-      document.getElementById('save-general-settings')?.click();
-      break;
-    case 'result':
-      // 편집 내용 저장
-      document.getElementById('save-edit')?.click();
-      break;
-  }
-}
-
-/**
- * 퀵 액션 표시
- */
-async function showQuickActions() {
-  const actions = [
-    { label: '🏠 홈', action: () => router.navigate('home') },
-    { label: '📝 새 글 생성', action: () => router.navigate('home') },
-    { label: '📦 대량 생성', action: () => router.navigate('batch') },
-    { label: '🖼️ 이미지 생성', action: () => router.navigate('image') },
-    { label: '📅 예약 포스팅', action: () => router.navigate('schedule') },
-    { label: '📊 사용량 통계', action: () => router.navigate('stats') },
-    { label: '📚 히스토리', action: () => router.navigate('history') },
-    { label: '⚙️ 설정', action: () => router.navigate('settings') }
-  ];
-
-  const content = `
-    <div class="quick-actions">
-      ${actions.map((a, i) => `
-        <button class="quick-action-item" data-index="${i}">${a.label}</button>
-      `).join('')}
-    </div>
-  `;
-
-  const modalEl = modal.open({
-    title: '빠른 이동',
-    content,
-    size: 'sm'
-  });
-
-  modalEl.querySelectorAll('.quick-action-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const index = parseInt(btn.dataset.index);
-      modal.close();
-      actions[index].action();
-    });
-  });
-
-  // 첫 번째 아이템 포커스
-  modalEl.querySelector('.quick-action-item')?.focus();
-}
 
 /**
  * 테마 변경 감지

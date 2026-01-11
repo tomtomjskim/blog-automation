@@ -128,6 +128,176 @@ class TemplateManager {
 - 주의사항 및 팁
 - FAQ`,
       keywordsTemplate: ['{{subject}}', '가이드', '방법', '튜토리얼']
+    },
+    {
+      id: 'food-product-review',
+      name: '음식/음료 후기',
+      emoji: '☕',
+      description: '커피, 음식, 디저트 등 제품 후기',
+      category: 'food',
+      isPreset: true,
+      settings: {
+        style: 'review',
+        length: 'medium',
+        provider: 'anthropic'
+      },
+      variables: {
+        productName: { label: '제품명', placeholder: '스타벅스 아이스 아메리카노' },
+        price: { label: '가격', placeholder: '4,500원' },
+        purchasePlace: { label: '구매처', placeholder: '편의점' }
+      },
+      promptTemplate: `{{productName}} 솔직 후기를 작성해주세요.
+가격: {{price}} / 구매처: {{purchasePlace}}
+
+다음 내용을 포함해주세요:
+- 첫인상 및 패키지
+- 맛 평가 (단맛, 신맛, 쓴맛 등)
+- 가성비 평가
+- 재구매 의사
+- 추천 대상`,
+      keywordsTemplate: ['{{productName}}', '후기', '리뷰', '추천']
+    },
+    {
+      id: 'consumer-product-review',
+      name: '생활용품 후기',
+      emoji: '🛒',
+      description: '일반 상품, 생활용품 구매 후기',
+      category: 'lifestyle',
+      isPreset: true,
+      settings: {
+        style: 'review',
+        length: 'medium',
+        provider: 'anthropic'
+      },
+      variables: {
+        productName: { label: '제품명', placeholder: '다이슨 청소기' },
+        usePeriod: { label: '사용 기간', placeholder: '1개월' },
+        price: { label: '구매가', placeholder: '50만원' }
+      },
+      promptTemplate: `{{productName}} {{usePeriod}} 사용 후기를 작성해주세요.
+구매가: {{price}}
+
+다음 내용을 포함해주세요:
+- 구매 이유
+- 실제 사용 경험
+- 장점 3가지
+- 단점 3가지
+- 총평 및 별점`,
+      keywordsTemplate: ['{{productName}}', '사용후기', '솔직후기', '추천']
+    },
+    {
+      id: 'opinion-essay',
+      name: '의견/칼럼',
+      emoji: '💭',
+      description: '사회 이슈, 개인 의견 에세이',
+      category: 'lifestyle',
+      isPreset: true,
+      settings: {
+        style: 'informative',
+        length: 'long',
+        provider: 'anthropic'
+      },
+      variables: {
+        topic: { label: '주제', placeholder: 'MZ세대의 직장 문화' },
+        stance: { label: '입장', placeholder: '긍정적' }
+      },
+      promptTemplate: `"{{topic}}"에 대한 칼럼을 작성해주세요.
+저자 입장: {{stance}}
+
+다음 구조로 작성해주세요:
+- 서론: 이슈 소개 및 관심 유도
+- 본론: 현황 분석 및 다양한 시각
+- 결론: 개인적 견해 및 제언
+
+논리적이면서도 읽기 쉬운 문체로 작성해주세요.`,
+      keywordsTemplate: ['{{topic}}', '칼럼', '의견', '생각']
+    },
+    {
+      id: 'survey-analysis',
+      name: '설문/조사 분석',
+      emoji: '📊',
+      description: '설문조사 결과 분석 형식',
+      category: 'tech',
+      isPreset: true,
+      settings: {
+        style: 'informative',
+        length: 'long',
+        provider: 'anthropic'
+      },
+      variables: {
+        surveyTopic: { label: '조사 주제', placeholder: '직장인 점심 식사 패턴' },
+        sampleSize: { label: '응답자 수', placeholder: '500명' },
+        period: { label: '조사 기간', placeholder: '2024년 1월' }
+      },
+      promptTemplate: `"{{surveyTopic}}" 설문조사 분석 리포트를 작성해주세요.
+응답자: {{sampleSize}} / 조사 기간: {{period}}
+
+다음 형식으로 작성해주세요:
+1. 조사 개요
+2. 주요 결과 (가상의 통계 수치 포함)
+3. 세부 분석 (차트 위치 표시)
+4. 시사점 및 결론
+
+전문적이고 객관적인 톤으로 작성해주세요.`,
+      keywordsTemplate: ['{{surveyTopic}}', '설문조사', '분석', '통계']
+    },
+    {
+      id: 'stock-report',
+      name: '주식/경제 리포트',
+      emoji: '📈',
+      description: '종목 분석, 경제 동향 리포트',
+      category: 'finance',
+      isPreset: true,
+      settings: {
+        style: 'informative',
+        length: 'long',
+        provider: 'anthropic'
+      },
+      variables: {
+        companyOrTopic: { label: '종목/주제', placeholder: '삼성전자' },
+        analysisType: { label: '분석 유형', placeholder: '기술적 분석' }
+      },
+      promptTemplate: `{{companyOrTopic}} {{analysisType}} 리포트를 작성해주세요.
+
+다음 내용을 포함해주세요:
+- 기업/시장 개요
+- 최근 동향 및 이슈
+- 분석 포인트 (차트 위치 표시)
+- 투자 포인트 및 리스크
+- 결론 및 전망
+
+※ 투자 권유가 아닌 정보 제공 목적임을 명시해주세요.`,
+      keywordsTemplate: ['{{companyOrTopic}}', '주식', '분석', '투자']
+    },
+    {
+      id: 'comparison-review',
+      name: '비교 리뷰',
+      emoji: '⚖️',
+      description: '제품/서비스 비교 분석',
+      category: 'tech',
+      isPreset: true,
+      settings: {
+        style: 'review',
+        length: 'long',
+        provider: 'anthropic'
+      },
+      variables: {
+        product1: { label: '제품 A', placeholder: '아이폰 15' },
+        product2: { label: '제품 B', placeholder: '갤럭시 S24' },
+        criteria: { label: '비교 기준', placeholder: '일상 사용' }
+      },
+      promptTemplate: `{{product1}} vs {{product2}} 비교 리뷰를 작성해주세요.
+비교 기준: {{criteria}}
+
+다음 형식으로 작성해주세요:
+1. 각 제품 소개
+2. 주요 스펙 비교표
+3. 항목별 상세 비교 (디자인, 성능, 카메라, 배터리 등)
+4. 사용 시나리오별 추천
+5. 최종 결론
+
+객관적이고 균형 잡힌 시각으로 작성해주세요.`,
+      keywordsTemplate: ['{{product1}}', '{{product2}}', '비교', '추천']
     }
   ];
 
@@ -374,9 +544,10 @@ class TemplateManager {
     return [
       { id: 'recent', name: '최근 사용', icon: '🕐' },
       { id: 'travel', name: '여행', icon: '✈️' },
-      { id: 'food', name: '맛집', icon: '🍽️' },
+      { id: 'food', name: '맛집/음식', icon: '🍽️' },
       { id: 'tech', name: 'IT/테크', icon: '💻' },
-      { id: 'lifestyle', name: '일상', icon: '🌿' },
+      { id: 'lifestyle', name: '일상/의견', icon: '🌿' },
+      { id: 'finance', name: '경제/금융', icon: '📈' },
       { id: 'custom', name: '내 템플릿', icon: '📝' }
     ];
   }

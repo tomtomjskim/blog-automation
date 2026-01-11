@@ -30,10 +30,10 @@ export function renderImagePage() {
       <div class="container container-md">
         <!-- 헤더 -->
         <div class="page-header">
-          <button class="btn btn-ghost" onclick="history.back()">
-            ← 뒤로
-          </button>
-          <h1 class="page-title">이미지</h1>
+          <div class="page-header-content">
+            <h1 class="page-title">🖼️ 이미지</h1>
+            <p class="page-description">이미지를 업로드하거나 AI로 생성하세요</p>
+          </div>
         </div>
 
         <!-- 탭 메뉴 -->

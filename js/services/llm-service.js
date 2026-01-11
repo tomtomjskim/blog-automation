@@ -247,6 +247,24 @@ class LLMService {
       };
     });
   }
+
+  /**
+   * 모델 비용 정보 가져오기
+   */
+  getModelCosts(providerName, modelId) {
+    const ProviderClass = this.providerClasses[providerName];
+    if (!ProviderClass) return null;
+
+    const instance = new ProviderClass('');
+    const model = instance.models?.[modelId];
+
+    if (!model) return null;
+
+    return {
+      input: model.inputCost || 0,
+      output: model.outputCost || 0
+    };
+  }
 }
 
 // 싱글톤 인스턴스

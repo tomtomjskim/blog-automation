@@ -1,0 +1,53 @@
+{
+  "name": "Blog Automation",
+  "short_name": "BlogAuto",
+  "description": "AI 블로그 자동화 도구",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0066FF",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%230066FF' width='192' height='192' rx='32'/><text x='96' y='140' font-size='120' text-anchor='middle' fill='white'>✍️</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%230066FF' width='512' height='512' rx='64'/><text x='256' y='360' font-size='280' text-anchor='middle' fill='white'>✍️</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "새 글 생성",
+      "short_name": "생성",
+      "description": "AI로 새 블로그 글 생성",
+      "url": "/#home",
+      "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='72' font-size='72'>✨</text></svg>", "sizes": "96x96" }]
+    },
+    {
+      "name": "히스토리",
+      "short_name": "기록",
+      "description": "생성 기록 보기",
+      "url": "/#history",
+      "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='72' font-size='72'>📚</text></svg>", "sizes": "96x96" }]
+    },
+    {
+      "name": "설정",
+      "short_name": "설정",
+      "description": "앱 설정",
+      "url": "/#settings",
+      "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='72' font-size='72'>⚙️</text></svg>", "sizes": "96x96" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

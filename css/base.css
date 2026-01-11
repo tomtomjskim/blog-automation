@@ -83,23 +83,52 @@ input, textarea, select {
   color: var(--primary-dark);
 }
 
-/* Scrollbar */
+/* Scrollbar - Overlay Style */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+html:hover {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--gray-400);
-  border-radius: var(--radius-full);
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.2s;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-500);
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+/* Dark mode scrollbar */
+@media (prefers-color-scheme: dark) {
+  html:hover {
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+
+  *:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  *:hover::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
 }
 
 /* Focus Visible */

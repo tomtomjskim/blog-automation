@@ -29,17 +29,15 @@ export function renderHistoryPage() {
       <div class="container container-lg">
         <!-- 헤더 -->
         <div class="page-header">
-          <button class="btn btn-ghost" onclick="window.location.hash='home'">
-            ← 뒤로
-          </button>
-          <h1 class="page-title">히스토리</h1>
-          <div class="page-header-actions">
-            ${history.length > 0 ? `
-              <button class="btn btn-ghost text-danger" id="clear-all-history">
-                전체 삭제
-              </button>
-            ` : ''}
+          <div class="page-header-content">
+            <h1 class="page-title">📚 히스토리</h1>
+            <p class="page-description">생성된 글 기록을 확인하고 관리하세요</p>
           </div>
+          ${history.length > 0 ? `
+            <button class="btn btn-ghost text-danger" id="clear-all-history">
+              전체 삭제
+            </button>
+          ` : ''}
         </div>
 
         ${history.length > 0 ? `
