@@ -18,28 +18,55 @@ let currentTab = 'api';
  * 설정 페이지 렌더링
  */
 export function renderSettingsPage() {
-  const app = document.getElementById('app');
-  const { settings, apiKeys, naverBlog, unlocked } = store.getState();
+  console.log('[Settings] renderSettingsPage called');
 
-  app.innerHTML = `
-    <div class="settings-page">
-      <div class="container container-md">
-        <!-- 헤더 -->
-        <div class="page-header">
-          <div class="page-header-content">
-            <h1 class="page-title">⚙️ 설정</h1>
-            <p class="page-description">API 키와 앱 환경을 설정하세요</p>
+  try {
+    const app = document.getElementById('app');
+    const { settings, apiKeys, naverBlog, unlocked } = store.getState();
+
+    console.log('[Settings] State:', { unlocked, cryptoSupported: secureStorage.isSupported() });
+
+    app.innerHTML = `
+      <div class="settings-page">
+        <div class="container container-md">
+          <!-- 헤더 -->
+          <div class="page-header">
+            <div class="page-header-content">
+              <h1 class="page-title">⚙️ 설정</h1>
+              <p class="page-description">API 키와 앱 환경을 설정하세요</p>
+            </div>
+          </div>
+
+          <!-- 잠금 상태 확인 -->
+          ${!unlocked ? renderLockScreen() : renderSettingsTabs(settings, apiKeys, naverBlog)}
+        </div>
+      </div>
+    `;
+
+    // 이벤트 바인딩
+    bindSettingsEvents();
+    console.log('[Settings] Page rendered successfully');
+  } catch (error) {
+    console.error('[Settings] Render error:', error);
+    const app = document.getElementById('app');
+    if (app) {
+      app.innerHTML = `
+        <div class="settings-page">
+          <div class="container container-md">
+            <div class="card">
+              <div class="card-body">
+                <h2>설정 페이지 로드 오류</h2>
+                <p style="color: var(--error);">${error.message || '알 수 없는 오류가 발생했습니다'}</p>
+                <button class="btn btn-primary mt-4" onclick="window.location.reload()">
+                  페이지 새로고침
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <!-- 잠금 상태 확인 -->
-        ${!unlocked ? renderLockScreen() : renderSettingsTabs(settings, apiKeys, naverBlog)}
-      </div>
-    </div>
-  `;
-
-  // 이벤트 바인딩
-  bindSettingsEvents();
+      `;
+    }
+  }
 }
 
 /**
@@ -47,9 +74,47 @@ export function renderSettingsPage() {
  */
 function renderLockScreen() {
   const hasExistingPassword = secureStorage.hasStoredData();
+  const cryptoSupported = secureStorage.isSupported();
 
   // 첫 사용자 온보딩 화면
   if (!hasExistingPassword) {
+    // Web Crypto API가 지원되지 않는 경우 (HTTP 환경)
+    if (!cryptoSupported) {
+      return `
+        <div class="card">
+          <div class="card-body">
+            <div class="lock-screen onboarding">
+              <div class="lock-icon">⚠️</div>
+              <h2 class="lock-title">HTTPS 필요</h2>
+              <p class="lock-desc">
+                API 키 암호화 기능을 사용하려면<br>
+                <strong>HTTPS 연결</strong>이 필요합니다.
+              </p>
+
+              <div class="onboarding-benefits mt-4" style="background: var(--warning-light, #FFF3E0);">
+                <div class="benefit-item">
+                  <span class="benefit-icon">ℹ️</span>
+                  <span class="benefit-text">현재 HTTP 연결은 암호화를 지원하지 않습니다</span>
+                </div>
+                <div class="benefit-item">
+                  <span class="benefit-icon">💡</span>
+                  <span class="benefit-text">HTTPS로 접속하거나 암호화 없이 사용하세요</span>
+                </div>
+              </div>
+
+              <button type="button" class="btn btn-primary btn-lg w-full mt-6" id="skip-security">
+                암호화 없이 계속하기
+              </button>
+
+              <p class="text-center mt-4" style="font-size: 12px; color: var(--text-tertiary);">
+                API 키가 브라우저에 평문으로 저장됩니다
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="card">
         <div class="card-body">
@@ -128,6 +193,36 @@ function renderLockScreen() {
  * 설정 탭 렌더링
  */
 function renderSettingsTabs(settings, apiKeys, naverBlog) {
+  console.log('[Settings] renderSettingsTabs called, currentTab:', currentTab);
+
+  // null 체크
+  const safeApiKeys = apiKeys || {};
+  const safeSettings = settings || {};
+  const safeNaverBlog = naverBlog || {};
+
+  let tabContent = '';
+
+  try {
+    if (currentTab === 'api') {
+      tabContent = renderApiKeysTab(safeApiKeys);
+    } else if (currentTab === 'naver') {
+      tabContent = renderNaverTab(safeNaverBlog);
+    } else if (currentTab === 'general') {
+      tabContent = renderGeneralTab(safeSettings);
+    } else if (currentTab === 'data') {
+      tabContent = renderDataTab();
+    }
+    console.log('[Settings] Tab content length:', tabContent?.length);
+  } catch (error) {
+    console.error('[Settings] Tab content error:', error);
+    tabContent = `<div class="card"><div class="card-body"><p style="color:red;">오류: ${error.message}</p></div></div>`;
+  }
+
+  // 탭 내용이 비어있으면 기본 메시지 표시
+  if (!tabContent || tabContent.trim() === '') {
+    tabContent = `<div class="card"><div class="card-body"><p>탭 내용을 불러올 수 없습니다. (currentTab: ${currentTab})</p></div></div>`;
+  }
+
   return `
     <div class="settings-tabs">
       <div class="tabs mb-4">
@@ -145,11 +240,8 @@ function renderSettingsTabs(settings, apiKeys, naverBlog) {
         </button>
       </div>
 
-      <div class="tab-content">
-        ${currentTab === 'api' ? renderApiKeysTab(apiKeys) : ''}
-        ${currentTab === 'naver' ? renderNaverTab(naverBlog) : ''}
-        ${currentTab === 'general' ? renderGeneralTab(settings) : ''}
-        ${currentTab === 'data' ? renderDataTab() : ''}
+      <div class="tab-content active">
+        ${tabContent}
       </div>
     </div>
   `;
@@ -568,22 +660,32 @@ function renderDataTab() {
  * 이벤트 바인딩
  */
 function bindSettingsEvents() {
-  // 탭 전환
-  document.querySelectorAll('.tabs .tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      currentTab = tab.dataset.tab;
-      renderSettingsPage();
+  try {
+    // 탭 전환
+    document.querySelectorAll('.tabs .tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        currentTab = tab.dataset.tab;
+        renderSettingsPage();
+      });
     });
-  });
 
-  // 잠금 해제
-  document.getElementById('unlock-form')?.addEventListener('submit', handleUnlock);
+    // 잠금 해제
+    document.getElementById('unlock-form')?.addEventListener('submit', handleUnlock);
 
-  // 새 비밀번호 설정 (온보딩)
-  document.getElementById('setup-password-form')?.addEventListener('submit', handleSetupPassword);
+    // 새 비밀번호 설정 (온보딩)
+    document.getElementById('setup-password-form')?.addEventListener('submit', handleSetupPassword);
 
-  // 보안 설정 스킵
-  document.getElementById('skip-security')?.addEventListener('click', handleSkipSecurity);
+    // 보안 설정 스킵 - 직접 인라인으로 바인딩
+    const skipBtn = document.getElementById('skip-security');
+    if (skipBtn) {
+      skipBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[Settings] Skip security button clicked');
+        handleSkipSecurity();
+      });
+      console.log('[Settings] Skip security button bound successfully');
+    }
 
   // API 키 저장
   document.getElementById('api-keys-form')?.addEventListener('submit', handleSaveApiKeys);
@@ -615,6 +717,11 @@ function bindSettingsEvents() {
   document.getElementById('import-file')?.addEventListener('change', handleImportData);
   document.getElementById('clear-history')?.addEventListener('click', handleClearHistory);
   document.getElementById('clear-all-data')?.addEventListener('click', handleClearAllData);
+
+  } catch (error) {
+    console.error('[Settings] Event binding error:', error);
+    toast.error('설정 페이지 초기화 중 오류가 발생했습니다');
+  }
 }
 
 /**
@@ -655,6 +762,14 @@ async function handleUnlock(e) {
  */
 async function handleSetupPassword(e) {
   e.preventDefault();
+  console.log('[Settings] handleSetupPassword called');
+
+  // Web Crypto API 지원 확인
+  if (!secureStorage.isSupported()) {
+    toast.error('HTTPS 연결이 필요합니다. 암호화 없이 사용하려면 "나중에 설정하기"를 클릭하세요.');
+    console.error('[Settings] Web Crypto API not supported (requires HTTPS)');
+    return;
+  }
 
   const newPassword = document.getElementById('new-password').value;
   const confirmPassword = document.getElementById('confirm-password').value;
@@ -683,8 +798,12 @@ async function handleSetupPassword(e) {
     toast.success('비밀번호가 설정되었습니다! 이제 API 키를 안전하게 저장할 수 있습니다.');
     renderSettingsPage();
   } catch (error) {
-    toast.error('비밀번호 설정에 실패했습니다');
-    console.error('Setup password error:', error);
+    console.error('[Settings] Setup password error:', error);
+    if (error.message?.includes('Crypto API') || error.message?.includes('not supported')) {
+      toast.error('HTTPS 연결이 필요합니다. 암호화 기능을 사용할 수 없습니다.');
+    } else {
+      toast.error('비밀번호 설정에 실패했습니다: ' + (error.message || '알 수 없는 오류'));
+    }
   }
 }
 
@@ -692,9 +811,16 @@ async function handleSetupPassword(e) {
  * 보안 설정 스킵 핸들러
  */
 function handleSkipSecurity() {
-  store.setState({ unlocked: true });
-  toast.info('보안 설정을 건너뛰었습니다. 나중에 설정에서 활성화할 수 있습니다.');
-  renderSettingsPage();
+  console.log('[Settings] handleSkipSecurity called');
+  try {
+    store.setState({ unlocked: true });
+    console.log('[Settings] State updated: unlocked = true');
+    toast.info('보안 설정을 건너뛰었습니다. 나중에 설정에서 활성화할 수 있습니다.');
+    renderSettingsPage();
+  } catch (error) {
+    console.error('[Settings] Skip security error:', error);
+    toast.error('설정 건너뛰기 중 오류가 발생했습니다');
+  }
 }
 
 /**
@@ -732,17 +858,23 @@ async function handleSaveApiKeys(e) {
     const currentKeys = store.get('apiKeys');
     const newKeys = { ...currentKeys, ...keys };
 
-    // 암호화하여 저장
-    const password = await modal.prompt({
-      title: '비밀번호 확인',
-      message: 'API 키를 암호화하기 위한 비밀번호를 입력하세요',
-      placeholder: '비밀번호'
-    });
+    // HTTPS 환경에서만 암호화 사용
+    if (secureStorage.isSupported()) {
+      const password = await modal.prompt({
+        title: '비밀번호 확인',
+        message: 'API 키를 암호화하기 위한 비밀번호를 입력하세요',
+        placeholder: '비밀번호'
+      });
 
-    if (!password) return;
+      if (!password) return;
 
-    const encrypted = await secureStorage.encrypt(newKeys, password);
-    localStorage.setItem('blog_auto_keys', JSON.stringify(encrypted));
+      const encrypted = await secureStorage.encrypt(newKeys, password);
+      localStorage.setItem('blog_auto_keys', JSON.stringify(encrypted));
+    } else {
+      // HTTP 환경: 평문 저장 (경고 포함)
+      localStorage.setItem('blog_auto_keys_plain', JSON.stringify(newKeys));
+      console.warn('[Settings] API keys saved without encryption (HTTP environment)');
+    }
 
     setApiKeys(newKeys);
     toast.success('API 키가 저장되었습니다');
