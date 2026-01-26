@@ -5,6 +5,7 @@
 
 import { store, setApiKeys, updateSettings, applyTheme, setNaverBlogConnection } from '../state.js';
 import { secureStorage } from '../core/crypto.js';
+import { appConfig } from '../core/config.js';
 import { storage } from '../core/storage.js';
 import { toast } from '../ui/toast.js';
 import { modal } from '../ui/modal.js';
@@ -477,6 +478,88 @@ function renderNaverTab(naverBlog) {
 }
 
 /**
+ * 환경 정보 렌더링
+ */
+function renderEnvironmentInfo() {
+  const envInfo = appConfig.getEnvironmentInfo();
+  const securityInfo = secureStorage.getSecurityInfo();
+  
+  const modeClass = envInfo.mode === 'dev' ? 'warning' : 'success';
+  const modeText = envInfo.mode === 'dev' ? '개발 모드 (DEV)' : '운영 모드 (PROD)';
+  const modeIcon = envInfo.mode === 'dev' ? '⚠️' : '✅';
+  
+  return `
+    ${envInfo.mode === 'dev' ? `
+    <div class="alert alert-warning mb-4">
+      <strong>⚠️ 개발 모드</strong><br>
+      HTTP 환경에서는 암호화가 비활성화됩니다.<br>
+      API 키가 Base64로만 인코딩되어 저장됩니다.<br>
+      <small class="text-muted">HTTPS 도메인 연결 시 자동으로 AES-256 암호화가 적용됩니다.</small>
+    </div>
+    ` : `
+    <div class="alert alert-success mb-4">
+      <strong>✅ 운영 모드</strong><br>
+      HTTPS 환경에서 AES-256 암호화가 활성화되어 있습니다.
+    </div>
+    `}
+    
+    <div class="setting-item">
+      <div class="setting-info">
+        <span class="setting-label">현재 모드</span>
+        <span class="setting-desc">환경에 따라 자동 감지됩니다</span>
+      </div>
+      <span class="badge badge-${modeClass}">${modeIcon} ${modeText}</span>
+    </div>
+    
+    <div class="setting-item">
+      <div class="setting-info">
+        <span class="setting-label">프로토콜</span>
+        <span class="setting-desc">현재 접속 프로토콜</span>
+      </div>
+      <span class="text-muted">${envInfo.protocol}</span>
+    </div>
+    
+    <div class="setting-item">
+      <div class="setting-info">
+        <span class="setting-label">호스트</span>
+        <span class="setting-desc">현재 접속 주소</span>
+      </div>
+      <span class="text-muted">${envInfo.hostname}${envInfo.port ? ':' + envInfo.port : ''}</span>
+    </div>
+    
+    <div class="setting-item">
+      <div class="setting-info">
+        <span class="setting-label">Secure Context</span>
+        <span class="setting-desc">HTTPS 또는 localhost 여부</span>
+      </div>
+      <span class="${envInfo.isSecureContext ? 'text-success' : 'text-warning'}">
+        ${envInfo.isSecureContext ? '✓ 활성화' : '✗ 비활성화'}
+      </span>
+    </div>
+    
+    <div class="setting-item">
+      <div class="setting-info">
+        <span class="setting-label">암호화</span>
+        <span class="setting-desc">데이터 암호화 방식</span>
+      </div>
+      <span class="text-muted">${securityInfo.algorithm}</span>
+    </div>
+    
+    ${securityInfo.hasStoredData ? `
+    <div class="setting-item">
+      <div class="setting-info">
+        <span class="setting-label">저장된 데이터</span>
+        <span class="setting-desc">현재 저장된 데이터 형식</span>
+      </div>
+      <span class="${securityInfo.isDevModeData ? 'text-warning' : 'text-success'}">
+        ${securityInfo.isDevModeData ? '⚠️ DEV 모드 (비암호화)' : '✅ PROD 모드 (암호화)'}
+      </span>
+    </div>
+    ` : ''}
+  `;
+}
+
+/**
  * 일반 설정 탭 렌더링
  */
 function renderGeneralTab(settings) {
@@ -569,6 +652,16 @@ function renderGeneralTab(settings) {
             설정 저장
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- 환경 정보 -->
+    <div class="card mt-4">
+      <div class="card-header">
+        <h2 class="card-title">환경 정보</h2>
+      </div>
+      <div class="card-body">
+        ${renderEnvironmentInfo()}
       </div>
     </div>
   `;

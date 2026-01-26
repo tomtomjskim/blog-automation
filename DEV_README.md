@@ -1,11 +1,11 @@
 # Blog Automation - 개발 현황
 
-> 최종 업데이트: 2026-01-11
+> 최종 업데이트: 2026-01-26
 > 담당: Claude Code
 
 ---
 
-## 현재 상태: Phase 4 완료 (전체 완료)
+## 현재 상태: Phase 5 완료 (Dev/Prod 모드 지원)
 
 ```
 [완료] Phase 1 MVP - 기본 기능
@@ -26,11 +26,48 @@
 [완료] Phase 4 - 부가 기능 (2026-01-11)
   ├── PWA 오프라인 모드 (manifest.json, sw.js, offline.html)
   └── 시리즈 관리 (series-manager.js)
+[완료] Phase 5 - Dev/Prod 환경 분리 (2026-01-26)
+  ├── 환경 설정 시스템 (config.js)
+  ├── HTTP/HTTPS 자동 감지
+  ├── 암호화 폴백 (dev: Base64+XOR, prod: AES-GCM-256)
+  └── 설정 페이지 환경 정보 UI
 ```
 
 ---
 
 ## 최근 작업 이력
+
+### 2026-01-26: Phase 5 - Dev/Prod 환경 분리
+
+| 기능 | 구현 파일 |
+|------|-----------|
+| 환경 설정 시스템 | `js/core/config.js` (신규) |
+| 암호화 폴백 | `js/core/crypto.js` (수정) |
+| 환경 정보 UI | `js/pages/settings.js` (수정) |
+| Alert/Badge CSS | `css/components.css` (수정) |
+
+**주요 변경사항:**
+
+1. **Dev/Prod 모드 자동 감지**
+   - HTTP 환경: dev 모드 (Base64+XOR 인코딩)
+   - HTTPS 환경: prod 모드 (AES-GCM-256 암호화)
+   - Secure Context 및 Web Crypto API 지원 여부 자동 확인
+
+2. **암호화 폴백 시스템**
+   - dev 모드: `DEV:` 접두사로 저장 데이터 구분
+   - prod 모드에서 저장된 데이터 → dev에서 읽기 시 에러 메시지
+   - 콘솔 보안 경고 (최초 1회)
+
+3. **설정 페이지 환경 정보**
+   - 현재 모드 표시 (dev/prod)
+   - 프로토콜/호스트 정보
+   - Secure Context 상태
+   - 암호화 알고리즘 표시
+   - dev 모드 경고 배너
+
+**서비스 URL:** `http://141.148.168.113:3005`
+
+---
 
 ### 2026-01-11: Phase 3-4 완료 (전체 완료)
 
@@ -88,11 +125,12 @@
 │   ├── app.js             # 앱 진입점
 │   ├── state.js           # 상태 관리
 │   ├── core/
-│   │   ├── crypto.js      # AES-GCM 암호화
+│   │   ├── config.js      # 환경 설정 (dev/prod 모드) (NEW)
+│   │   ├── crypto.js      # AES-GCM 암호화 + dev 모드 폴백
 │   │   ├── storage.js     # localStorage 래퍼
 │   │   ├── router.js      # 해시 라우터
 │   │   ├── events.js      # 이벤트 버스
-│   │   └── plugin-system.js    # 플러그인 시스템 (NEW)
+│   │   └── plugin-system.js    # 플러그인 시스템
 │   ├── utils/
 │   │   └── helpers.js     # 유틸리티 함수
 │   ├── providers/
@@ -203,6 +241,8 @@
 - 서비스 모듈 통합 (pages와 services 연결)
 - 실제 사용자 테스트 및 피드백 반영
 - 성능 최적화 (Service Worker 캐시 전략 튜닝)
+- HTTPS 도메인 연결 시 prod 모드 전환
+- dev → prod 데이터 마이그레이션 도구
 
 ---
 

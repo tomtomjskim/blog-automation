@@ -1,7 +1,10 @@
 /**
  * Blog Automation - Crypto Module
  * Web Crypto API 기반 AES-GCM 암호화
+ * dev 모드에서는 Base64 인코딩으로 폴백
  */
+
+import { appConfig } from './config.js';
 
 class SecureStorage {
   constructor() {
@@ -10,17 +13,39 @@ class SecureStorage {
     this.iterations = 100000;
     this.storageKey = 'blog_auto_encrypted';
     this.passwordKey = 'blog_auto_pwd_hash';
+    this._devModeWarningShown = false;
   }
 
   /**
-   * 브라우저 지원 여부 확인
+   * Secure Context 및 Web Crypto API 지원 여부 확인
    */
   isSupported() {
-    return !!(window.crypto && window.crypto.subtle);
+    return appConfig.canUseEncryption();
   }
 
   /**
-   * 비밀번호로부터 암호화 키 파생
+   * dev 모드 여부
+   */
+  isDevMode() {
+    return appConfig.isDevMode();
+  }
+
+  /**
+   * dev 모드 경고 표시 (최초 1회)
+   */
+  _showDevModeWarning() {
+    if (this._devModeWarningShown) return;
+    this._devModeWarningShown = true;
+
+    console.warn(
+      '⚠️ [보안 경고] HTTP 환경에서는 암호화가 비활성화됩니다.\n' +
+      '   API 키가 Base64로만 인코딩되어 저장됩니다.\n' +
+      '   HTTPS 환경에서 사용하시면 AES-256 암호화가 적용됩니다.'
+    );
+  }
+
+  /**
+   * 비밀번호로부터 암호화 키 파생 (prod 모드)
    */
   async deriveKey(password, salt) {
     const encoder = new TextEncoder();
@@ -48,8 +73,17 @@ class SecureStorage {
 
   /**
    * 데이터 암호화
+   * dev 모드: Base64 인코딩
+   * prod 모드: AES-GCM 암호화
    */
   async encrypt(data, password) {
+    // dev 모드: Base64 인코딩으로 폴백
+    if (this.isDevMode()) {
+      this._showDevModeWarning();
+      return this._devModeEncode(data, password);
+    }
+
+    // prod 모드: 실제 암호화
     if (!this.isSupported()) {
       throw new Error('Web Crypto API not supported');
     }
@@ -76,8 +110,16 @@ class SecureStorage {
 
   /**
    * 데이터 복호화
+   * dev 모드: Base64 디코딩
+   * prod 모드: AES-GCM 복호화
    */
   async decrypt(encryptedData, password) {
+    // dev 모드: Base64 디코딩으로 폴백
+    if (this.isDevMode()) {
+      return this._devModeDecode(encryptedData, password);
+    }
+
+    // prod 모드: 실제 복호화
     if (!this.isSupported()) {
       throw new Error('Web Crypto API not supported');
     }
@@ -105,14 +147,86 @@ class SecureStorage {
   }
 
   /**
+   * dev 모드 인코딩 (Base64 + 간단한 XOR)
+   */
+  _devModeEncode(data, password) {
+    const jsonStr = JSON.stringify(data);
+    const encoded = this._xorEncode(jsonStr, password);
+    return 'DEV:' + btoa(encodeURIComponent(encoded));
+  }
+
+  /**
+   * dev 모드 디코딩
+   */
+  _devModeDecode(encodedData, password) {
+    try {
+      // DEV: 접두사 확인
+      if (!encodedData.startsWith('DEV:')) {
+        // prod 모드에서 저장된 데이터를 dev 모드에서 읽으려는 경우
+        throw new Error('이 데이터는 HTTPS 환경에서 암호화되었습니다. HTTPS로 접속해주세요.');
+      }
+
+      const base64Data = encodedData.slice(4);
+      const decoded = decodeURIComponent(atob(base64Data));
+      const jsonStr = this._xorDecode(decoded, password);
+      return JSON.parse(jsonStr);
+    } catch (error) {
+      if (error.message.includes('HTTPS')) {
+        throw error;
+      }
+      throw new Error('복호화 실패: 비밀번호가 올바르지 않습니다');
+    }
+  }
+
+  /**
+   * 간단한 XOR 인코딩 (난독화 목적)
+   */
+  _xorEncode(str, key) {
+    let result = '';
+    for (let i = 0; i < str.length; i++) {
+      result += String.fromCharCode(
+        str.charCodeAt(i) ^ key.charCodeAt(i % key.length)
+      );
+    }
+    return result;
+  }
+
+  /**
+   * XOR 디코딩
+   */
+  _xorDecode(str, key) {
+    return this._xorEncode(str, key); // XOR은 대칭 연산
+  }
+
+  /**
    * 비밀번호 해시 생성 (검증용)
+   * dev 모드에서도 동일하게 동작
    */
   async hashPassword(password) {
+    if (this.isDevMode()) {
+      // dev 모드: 간단한 해시 (보안 수준 낮음)
+      return this._simpleHash(password + 'blog_auto_salt');
+    }
+
+    // prod 모드: SHA-256
     const encoder = new TextEncoder();
     const data = encoder.encode(password + 'blog_auto_salt');
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /**
+   * 간단한 해시 (dev 모드용)
+   */
+  _simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // 32bit 정수로 변환
+    }
+    return 'dev_' + Math.abs(hash).toString(16);
   }
 
   /**
@@ -156,6 +270,14 @@ class SecureStorage {
   }
 
   /**
+   * 저장된 데이터가 dev 모드에서 저장되었는지 확인
+   */
+  isDevModeData() {
+    const stored = localStorage.getItem(this.storageKey);
+    return stored && stored.startsWith('DEV:');
+  }
+
+  /**
    * 암호화 데이터 삭제
    */
   clearSecure() {
@@ -179,6 +301,19 @@ class SecureStorage {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * 현재 보안 상태 정보
+   */
+  getSecurityInfo() {
+    return {
+      mode: this.isDevMode() ? 'dev' : 'prod',
+      encryptionEnabled: !this.isDevMode(),
+      algorithm: this.isDevMode() ? 'Base64+XOR (insecure)' : 'AES-GCM-256',
+      hasStoredData: this.hasStoredData(),
+      isDevModeData: this.isDevModeData()
+    };
   }
 }
 
