@@ -3661,3 +3661,32 @@ textarea.input {
 .text-muted {
   color: var(--text-tertiary);
 }
+
+/* ===== FORM ACTIONS ===== */
+.form-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.form-actions .btn {
+  flex: 1;
+  max-width: 200px;
+}
+
+.form-actions .btn-primary {
+  flex: 2;
+  max-width: none;
+}
+
+@media (max-width: 480px) {
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+    max-width: none;
+  }
+}

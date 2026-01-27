@@ -837,6 +837,9 @@ async function handleUnlock(e) {
       // 기존 데이터 복호화 시도
       const keys = await secureStorage.decrypt(JSON.parse(encryptedData), password);
       setApiKeys(keys);
+
+      // LLM 서비스 Provider 초기화
+      llmService.initFromStorage(keys);
     } else {
       // 새 비밀번호 설정
       storage.updateSetting('passwordHash', await hashPassword(password));
@@ -970,6 +973,10 @@ async function handleSaveApiKeys(e) {
     }
 
     setApiKeys(newKeys);
+
+    // LLM 서비스 Provider 초기화
+    llmService.initFromStorage(newKeys);
+
     toast.success('API 키가 저장되었습니다');
     renderSettingsPage();
   } catch (error) {

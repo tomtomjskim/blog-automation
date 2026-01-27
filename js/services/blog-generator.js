@@ -569,6 +569,40 @@ ${blogContent.substring(0, 2000)}
       ...config
     }));
   }
+
+
+  /**
+   * 전체 프롬프트 반환 (API 호출 없이)
+   * - systemPrompt: 스타일별 시스템 프롬프트
+   * - userPrompt: 사용자 입력 기반 프롬프트
+   */
+  getFullPrompt(input) {
+    const {
+      style = 'casual',
+      topic,
+      keywords = [],
+      length = 'medium',
+      additionalInfo = '',
+      referenceUrl = '',
+      foodReviewOptions = null
+    } = input;
+
+    // 시스템 프롬프트 (스타일별)
+    const systemPrompt = STYLE_PROMPTS[style] || STYLE_PROMPTS.casual;
+
+    // 사용자 프롬프트 생성
+    const userPrompt = this.buildPrompt({
+      topic,
+      keywords,
+      length,
+      additionalInfo,
+      referenceUrl,
+      style,
+      foodReviewOptions
+    });
+
+    return { systemPrompt, userPrompt };
+  }
 }
 
 // 싱글톤 인스턴스

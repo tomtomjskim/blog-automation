@@ -13,6 +13,7 @@ import { modal } from '../ui/modal.js';
 import { TagInput } from '../ui/components.js';
 import { createImageUploadZone } from '../ui/image-upload-zone.js';
 import { showLLMSettingsModal, renderLLMIndicator } from '../ui/llm-settings-modal.js';
+import { showPromptResultModal } from '../ui/prompt-result-modal.js';
 
 let tagInput = null;
 let imageUploadZone = null;
@@ -164,14 +165,23 @@ export function renderWritePage() {
           </div>
 
           <!-- 생성 버튼 -->
-          ${availableProviders.length > 0 ? `
-            <div class="form-actions mt-6">
-              <button type="submit" class="btn btn-primary btn-lg w-full" id="generate-btn">
+          <div class="form-actions mt-6">
+            <button type="button" class="btn btn-secondary btn-lg" id="generate-prompt-btn">
+              <span class="btn-icon">📋</span>
+              프롬프트 생성
+            </button>
+            ${availableProviders.length > 0 ? `
+              <button type="submit" class="btn btn-primary btn-lg" id="generate-btn">
                 <span class="btn-icon">✨</span>
                 글 생성하기
               </button>
-            </div>
-          ` : ''}
+            ` : `
+              <button type="button" class="btn btn-primary btn-lg" id="generate-btn" disabled title="API 키를 먼저 설정해주세요">
+                <span class="btn-icon">✨</span>
+                글 생성하기
+              </button>
+            `}
+          </div>
         </form>
 
         <!-- 저장된 초안 -->
@@ -247,6 +257,9 @@ function bindWriteEvents() {
 
   // 폼 제출
   form?.addEventListener('submit', handleGenerate);
+
+  // 프롬프트 생성 버튼
+  document.getElementById('generate-prompt-btn')?.addEventListener('click', handleGeneratePrompt);
 
   // 스타일 선택
   document.querySelectorAll('.selection-card[data-style]').forEach(card => {
@@ -378,6 +391,36 @@ function toggleCollapsible(card, forceOpen = null) {
 /**
  * 글 생성 핸들러
  */
+/**
+ * 프롬프트 생성 핸들러 (API 호출 없이 프롬프트만 생성)
+ */
+function handleGeneratePrompt() {
+  const { currentGeneration } = store.getState();
+
+  // 유효성 검사
+  if (!currentGeneration.topic?.trim()) {
+    toast.error('주제를 입력해주세요');
+    document.getElementById('topic')?.focus();
+    return;
+  }
+
+  // 프롬프트 생성
+  const { systemPrompt, userPrompt } = blogGenerator.getFullPrompt(currentGeneration);
+
+  // 모달 표시
+  showPromptResultModal({
+    systemPrompt,
+    userPrompt,
+    onGenerate: () => {
+      // "이 프롬프트로 글 작성하기" 클릭 시 기존 생성 로직 실행
+      const form = document.getElementById('generate-form');
+      if (form) {
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    }
+  });
+}
+
 async function handleGenerate(e) {
   e.preventDefault();
 

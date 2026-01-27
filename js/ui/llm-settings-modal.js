@@ -161,6 +161,9 @@ export function getCurrentLLMInfo() {
  * API 키 미설정 시에도 간결하게 표시 (알림 센터에서 경고 처리)
  */
 export function renderLLMIndicator() {
+  // 스타일이 아직 추가되지 않았다면 추가
+  addLLMModalStyles();
+
   const info = getCurrentLLMInfo();
 
   if (!info || !info.hasApiKey) {

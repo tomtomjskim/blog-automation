@@ -8,6 +8,7 @@ import { router } from '../core/router.js';
 import { notificationCenter } from './notification-center.js';
 
 let sidebarOpen = false;
+let sidebarCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
 
 /**
  * 하단 네비게이션 메뉴 아이템
@@ -126,6 +127,9 @@ function renderSidebar() {
       <span class="sidebar-title">Blog Auto</span>
       <button class="sidebar-close" id="sidebar-close">✕</button>
     </div>
+    <button class="sidebar-collapse-btn" id="sidebar-collapse" title="사이드바 접기/펼치기">
+      <span class="collapse-icon">◀</span>
+    </button>
 
     <nav class="sidebar-nav">
       ${SIDEBAR_ITEMS.map(section => `
@@ -191,6 +195,12 @@ function bindLayoutEvents() {
   document.getElementById('menu-toggle')?.addEventListener('click', toggleSidebar);
   document.getElementById('sidebar-close')?.addEventListener('click', closeSidebar);
   document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
+  document.getElementById('sidebar-collapse')?.addEventListener('click', toggleSidebarCollapse);
+
+  // 초기 collapse 상태 적용
+  if (sidebarCollapsed) {
+    document.body.classList.add('sidebar-collapsed');
+  }
 
   // 사이드바 메뉴 클릭 시 닫기 (모바일)
   document.querySelectorAll('.sidebar-item').forEach(item => {
@@ -227,6 +237,15 @@ function toggleSidebar() {
 function closeSidebar() {
   sidebarOpen = false;
   updateSidebarState();
+}
+
+/**
+ * 사이드바 접기/펼치기 토글 (데스크톱)
+ */
+function toggleSidebarCollapse() {
+  sidebarCollapsed = !sidebarCollapsed;
+  localStorage.setItem('sidebar_collapsed', sidebarCollapsed);
+  document.body.classList.toggle('sidebar-collapsed', sidebarCollapsed);
 }
 
 /**
@@ -559,6 +578,11 @@ function addLayoutStyles() {
       font-weight: var(--font-medium);
     }
 
+    /* 사이드바 접기 버튼 (기본: 숨김, 데스크톱에서만 표시) */
+    .sidebar-collapse-btn {
+      display: none;
+    }
+
     /* Desktop Styles */
     @media (min-width: 768px) {
       .app-header-nav {
@@ -598,6 +622,67 @@ function addLayoutStyles() {
 
       .app-content {
         padding-bottom: var(--space-6);
+      }
+
+      /* 사이드바 접기 버튼 (데스크톱) */
+      .sidebar-collapse-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        right: -12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 24px;
+        height: 48px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-light);
+        border-radius: 0 6px 6px 0;
+        cursor: pointer;
+        color: var(--text-tertiary);
+        font-size: 10px;
+        transition: all 0.2s ease;
+        z-index: 10;
+      }
+
+      .sidebar-collapse-btn:hover {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+      }
+
+      /* 사이드바 접힌 상태 */
+      .sidebar-collapsed .app-sidebar {
+        width: 60px;
+      }
+
+      .sidebar-collapsed .sidebar-title,
+      .sidebar-collapsed .sidebar-item-label,
+      .sidebar-collapsed .sidebar-section-title,
+      .sidebar-collapsed .sidebar-footer,
+      .sidebar-collapsed .sidebar-shortcut {
+        display: none;
+      }
+
+      .sidebar-collapsed .sidebar-header {
+        justify-content: center;
+        padding: var(--space-4) var(--space-2);
+      }
+
+      .sidebar-collapsed .sidebar-item {
+        justify-content: center;
+        padding: var(--space-3);
+      }
+
+      .sidebar-collapsed .sidebar-item-icon {
+        font-size: 20px;
+      }
+
+      .sidebar-collapsed .app-main {
+        margin-left: 60px;
+      }
+
+      .sidebar-collapsed .sidebar-collapse-btn .collapse-icon {
+        transform: rotate(180deg);
       }
     }
 

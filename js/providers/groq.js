@@ -12,7 +12,7 @@ class GroqProvider extends LLMProvider {
     this.displayName = 'Groq';
     this.icon = '⚡';
     this.color = '#F55036';
-    this.baseUrl = '/api/proxy/groq';
+    this.baseUrl = '/api/proxy/groq/';
     this.supportsStreaming = true;
     this.supportsImage = false;
 

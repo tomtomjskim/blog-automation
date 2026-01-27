@@ -138,7 +138,21 @@ class TagInput {
   }
 
   bindEvents() {
+    // 한글 IME 조합 상태 추적
+    this.isComposing = false;
+
+    this.input.addEventListener('compositionstart', () => {
+      this.isComposing = true;
+    });
+
+    this.input.addEventListener('compositionend', () => {
+      this.isComposing = false;
+    });
+
     this.input.addEventListener('keydown', (e) => {
+      // 한글 조합 중에는 Enter/쉼표 무시
+      if (this.isComposing) return;
+
       if (e.key === 'Enter' || e.key === ',') {
         e.preventDefault();
         this.addTag(this.input.value);

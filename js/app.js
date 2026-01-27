@@ -23,6 +23,7 @@ import { renderBatchPage } from './pages/batch.js';
 
 // Services
 import { postScheduler } from './services/scheduler.js';
+import { llmService } from './services/llm-service.js';
 
 // Features
 import { keyboardManager } from './features/keyboard.js';
@@ -42,6 +43,9 @@ async function bootstrap() {
   // 앱 상태 초기화
   await initializeApp();
 
+  // HTTP 환경에서 평문 API 키 자동 로드
+  await loadPlainApiKeys();
+
   // 전역 이벤트 리스너
   setupGlobalListeners();
 
@@ -57,6 +61,24 @@ async function bootstrap() {
   // 라우터는 load 이벤트에서 자동으로 초기 라우팅 처리함
 
   console.log('✅ Blog Automation Ready');
+}
+
+/**
+ * HTTP 환경에서 평문 저장된 API 키 로드
+ */
+async function loadPlainApiKeys() {
+  // HTTP 환경에서 평문 저장된 키 확인
+  const plainKeys = localStorage.getItem('blog_auto_keys_plain');
+  if (plainKeys) {
+    try {
+      const keys = JSON.parse(plainKeys);
+      setApiKeys(keys);
+      llmService.initFromStorage(keys);
+      console.log('[App] Plain API keys loaded and providers initialized');
+    } catch (error) {
+      console.error('[App] Failed to load plain API keys:', error);
+    }
+  }
 }
 
 /**
