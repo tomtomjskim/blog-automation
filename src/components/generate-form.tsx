@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { TagInput } from './tag-input';
+import { ImageUpload } from './image-upload';
 import { STYLE_OPTIONS, LENGTH_OPTIONS } from '@/lib/prompts';
-import type { StyleId, LengthId, GenerationMode, StyleProfile } from '@/lib/types';
+import type { StyleId, LengthId, GenerationMode, StyleProfile, UploadedImage } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 export function GenerateForm() {
@@ -25,6 +26,9 @@ export function GenerateForm() {
   // 스타일 프로필
   const [profiles, setProfiles] = useState<StyleProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<string>('');
+
+  // 이미지 첨부
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
 
   // 이미지 생성
   const [klingConfigured, setKlingConfigured] = useState(false);
@@ -60,6 +64,7 @@ export function GenerateForm() {
           topic, keywords, style, length, mode, additionalInfo,
           styleProfileId: selectedProfile || null,
           generateImages,
+          imageIds: uploadedImages.map(img => img.id),
         }),
       });
       const data = await res.json();
@@ -222,6 +227,15 @@ export function GenerateForm() {
             Kling AI로 대표 이미지 2장을 자동 생성합니다 (~$0.03)
           </p>
         )}
+      </div>
+
+      {/* 이미지 첨부 */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium">이미지 첨부 (선택)</label>
+        <ImageUpload images={uploadedImages} onChange={setUploadedImages} />
+        <p className="text-xs text-muted-foreground">
+          첨부된 이미지를 AI가 분석하여 글의 적절한 위치에 삽입합니다.
+        </p>
       </div>
 
       {/* 추가 정보 */}

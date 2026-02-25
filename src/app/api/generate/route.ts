@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { query, queryOne } from '@/lib/db';
-import { runClaudeForBlog, runClaude } from '@/lib/claude';
-import { STYLE_PROMPTS, buildUserPrompt, buildFoodReviewPrompt, buildQualityReviewPrompt } from '@/lib/prompts';
+import { runClaudeForBlog, runClaude, runClaudeWithImages } from '@/lib/claude';
+import { STYLE_PROMPTS, buildUserPrompt, buildFoodReviewPrompt, buildQualityReviewPrompt, buildImageAnalysisPrompt, buildImageContextBlock } from '@/lib/prompts';
 import { analyzeSEO, parseResult } from '@/lib/seo-analyzer';
 import { setProgress, getRunningCount } from '@/lib/generation-store';
 import { isKlingConfigured, generateImage, buildImagePromptInstruction, parseImagePrompts } from '@/lib/kling';
+import path from 'path';
+import { stat as fsStat } from 'fs/promises';
 import type { StyleId, LengthId, GenerationMode } from '@/lib/types';
 
 const VALID_STYLES: StyleId[] = ['casual', 'informative', 'review', 'food_review', 'marketing', 'story'];
@@ -19,6 +21,7 @@ export async function POST(request: NextRequest) {
       topic, keywords = [], style = 'casual', length = 'medium',
       mode = 'quick', additionalInfo = '',
       styleProfileId = null, generateImages = false,
+      imageIds = [],
     } = body;
 
     // 검증
@@ -61,6 +64,7 @@ export async function POST(request: NextRequest) {
       additionalInfo,
       styleProfileId,
       generateImages: generateImages && isKlingConfigured(),
+      imageIds: Array.isArray(imageIds) ? imageIds : [],
     }).catch(err => {
       console.error(`[Generate] Background error for ${id}:`, err);
     });
@@ -83,11 +87,16 @@ async function runGeneration(
     additionalInfo: string;
     styleProfileId: string | null;
     generateImages: boolean;
+    imageIds: string[];
   },
 ) {
   const startTime = Date.now();
 
   try {
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalCost = 0;
+
     // 시스템 프롬프트 조합: 기본 스타일 + 사용자 프로필
     let systemPrompt = STYLE_PROMPTS[params.style];
 
@@ -101,12 +110,85 @@ async function runGeneration(
       }
     }
 
+    // 0단계: 첨부 이미지 분석 (있는 경우)
+    let imageContext = '';
+    const attachedImageUrls: string[] = [];
+    const hasImages = params.imageIds.length > 0;
+
+    if (hasImages) {
+      setProgress(id, 'running', '첨부 이미지를 분석하고 있습니다...');
+
+      const UPLOAD_DIR = '/app/uploads/images';
+      const imagePaths: string[] = [];
+
+      // imageId로 파일 경로 매핑 (UUID.확장자 패턴 검색)
+      for (const imgId of params.imageIds) {
+        const safeId = imgId.replace(/[^a-f0-9-]/g, '');
+        for (const ext of ['.jpg', '.png', '.webp']) {
+          const candidate = path.join(UPLOAD_DIR, `${safeId}${ext}`);
+          try {
+            await fsStat(candidate);
+            imagePaths.push(candidate);
+            attachedImageUrls.push(`/api/images/${safeId}${ext}`);
+            break;
+          } catch {
+            // 다음 확장자 시도
+          }
+        }
+      }
+
+      if (imagePaths.length > 0) {
+        try {
+          const analysisPrompt = buildImageAnalysisPrompt(params.topic, params.style);
+          const analysisResult = await runClaudeWithImages(analysisPrompt, imagePaths, { timeout: 120000 });
+
+          if (analysisResult.exitCode === 0 && analysisResult.output) {
+            totalInputTokens += analysisResult.usage.inputTokens;
+            totalOutputTokens += analysisResult.usage.outputTokens;
+            totalCost += analysisResult.usage.costUsd;
+
+            // JSON 파싱 (코드 블록 내부일 수 있음)
+            let jsonStr = analysisResult.output.trim();
+            const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (jsonMatch) jsonStr = jsonMatch[1].trim();
+            // 배열만 추출
+            const arrMatch = jsonStr.match(/\[[\s\S]*\]/);
+            if (arrMatch) jsonStr = arrMatch[0];
+
+            try {
+              const analyses = JSON.parse(jsonStr);
+              if (Array.isArray(analyses)) {
+                imageContext = buildImageContextBlock(analyses, attachedImageUrls);
+              }
+            } catch (parseErr) {
+              console.error('[Generate] Image analysis JSON parse failed:', parseErr);
+              // 분석 실패 시 기본 컨텍스트 생성
+              imageContext = `\n## 첨부 이미지\n아래 이미지들이 첨부되었습니다. 글의 적절한 위치에 삽입해주세요.\n\n`;
+              attachedImageUrls.forEach((url, i) => {
+                imageContext += `- ![첨부 이미지 ${i + 1}](${url})\n`;
+              });
+              imageContext += '\n';
+            }
+          }
+        } catch (imgErr) {
+          console.error('[Generate] Image analysis failed:', imgErr);
+          // 분석 실패해도 URL은 전달
+          imageContext = `\n## 첨부 이미지\n아래 이미지들이 첨부되었습니다. 글의 적절한 위치에 삽입해주세요.\n\n`;
+          attachedImageUrls.forEach((url, i) => {
+            imageContext += `- ![첨부 이미지 ${i + 1}](${url})\n`;
+          });
+          imageContext += '\n';
+        }
+      }
+    }
+
+    const promptParams = { ...params, imageContext: imageContext || undefined };
     const userPrompt = params.style === 'food_review'
-      ? buildFoodReviewPrompt(params)
-      : buildUserPrompt(params);
+      ? buildFoodReviewPrompt(promptParams)
+      : buildUserPrompt(promptParams);
 
     // 1단계: 초안 생성
-    const totalSteps = (params.mode === 'quality' ? 2 : 1) + (params.generateImages ? 1 : 0);
+    const totalSteps = (hasImages ? 1 : 0) + (params.mode === 'quality' ? 2 : 1) + (params.generateImages ? 1 : 0);
     let step = 1;
     setProgress(id, 'running', `글을 생성하고 있습니다... (${step}/${totalSteps} 단계)`);
 
@@ -117,9 +199,9 @@ async function runGeneration(
     }
 
     let finalOutput = result1.output;
-    let totalInputTokens = result1.usage.inputTokens;
-    let totalOutputTokens = result1.usage.outputTokens;
-    let totalCost = result1.usage.costUsd;
+    totalInputTokens += result1.usage.inputTokens;
+    totalOutputTokens += result1.usage.outputTokens;
+    totalCost += result1.usage.costUsd;
 
     // 2단계: Quality 모드 — 고도화
     if (params.mode === 'quality') {
@@ -136,8 +218,8 @@ async function runGeneration(
       }
     }
 
-    // 이미지 생성 단계 (Kling 설정 시)
-    let imageUrls: string[] = [];
+    // 이미지 URL 수집: 첨부 이미지 + Kling 생성 이미지
+    let imageUrls: string[] = [...attachedImageUrls];
     if (params.generateImages) {
       step++;
       setProgress(id, 'running', `이미지를 생성하고 있습니다... (${step}/${totalSteps} 단계)`);

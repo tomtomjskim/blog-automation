@@ -16,6 +16,15 @@ export interface LengthOption {
   label: string;
 }
 
+export interface UploadedImage {
+  id: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+}
+
 export interface GenerateRequest {
   topic: string;
   keywords?: string[];
@@ -23,6 +32,7 @@ export interface GenerateRequest {
   length?: LengthId;
   mode?: GenerationMode;
   additionalInfo?: string;
+  imageIds?: string[];
 }
 
 export interface GenerationRecord {

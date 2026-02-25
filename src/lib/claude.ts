@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from 'child_process';
+import { readFile } from 'fs/promises';
 
 export interface ClaudeUsage {
   inputTokens: number;
@@ -90,6 +91,115 @@ export async function runClaude(prompt: string, options?: ClaudeOptions): Promis
       if (settled) return;
       settled = true;
       console.error(`[Claude] Process error:`, err.message);
+      reject(err);
+    });
+  });
+}
+
+/** 이미지 비전 분석용 래퍼 — stream-json으로 base64 이미지 전송 */
+export async function runClaudeWithImages(
+  prompt: string,
+  imagePaths: string[],
+  options?: ClaudeOptions,
+): Promise<ClaudeResult> {
+  const start = Date.now();
+  const timeout = options?.timeout ?? 180000;
+  console.log(`[Claude] Starting vision CLI, images=${imagePaths.length}, prompt length=${prompt.length}`);
+
+  const args = [
+    '--input-format', 'stream-json',
+    '--output-format', 'stream-json',
+    '--verbose',
+    '--max-turns', String(options?.maxTurns ?? 1),
+  ];
+
+  // content blocks 구성: 이미지들 + 텍스트
+  const contentBlocks: Array<Record<string, unknown>> = [];
+
+  for (const imgPath of imagePaths) {
+    const buf = await readFile(imgPath);
+    const base64 = buf.toString('base64');
+    const ext = imgPath.split('.').pop()?.toLowerCase();
+    const mediaType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+    contentBlocks.push({
+      type: 'image',
+      source: { type: 'base64', media_type: mediaType, data: base64 },
+    });
+  }
+
+  contentBlocks.push({ type: 'text', text: prompt });
+
+  const stdinMessage = JSON.stringify({
+    type: 'user',
+    message: {
+      role: 'user',
+      content: contentBlocks,
+    },
+  });
+
+  return new Promise((resolve, reject) => {
+    const proc: ChildProcess = spawn('claude', args, {
+      timeout,
+      env: { ...process.env },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    proc.stdout!.on('data', (d: Buffer) => { stdout += d.toString(); });
+    proc.stderr!.on('data', (d: Buffer) => { stderr += d.toString(); });
+
+    // stdin으로 메시지 전송 후 닫기
+    proc.stdin!.write(stdinMessage + '\n');
+    proc.stdin!.end();
+
+    proc.on('close', (code, signal) => {
+      if (settled) return;
+      settled = true;
+      const duration = Math.round((Date.now() - start) / 1000);
+      console.log(`[Claude] Vision finished: exitCode=${code}, signal=${signal}, stdout=${stdout.length}ch, duration=${duration}s`);
+
+      let output = '';
+      let usage: ClaudeUsage = { ...ZERO_USAGE };
+
+      // stream-json 출력: 줄 단위 JSON, type="result" 찾기
+      try {
+        const lines = stdout.split('\n').filter(l => l.trim());
+        for (const line of lines) {
+          try {
+            const json = JSON.parse(line);
+            if (json.type === 'result') {
+              output = json.result || '';
+              if (json.usage) {
+                usage.inputTokens = json.usage.input_tokens ?? 0;
+                usage.outputTokens = json.usage.output_tokens ?? 0;
+                usage.cacheCreationTokens = json.usage.cache_creation_input_tokens ?? 0;
+                usage.cacheReadTokens = json.usage.cache_read_input_tokens ?? 0;
+              }
+              if (typeof json.total_cost_usd === 'number') {
+                usage.costUsd = json.total_cost_usd;
+              }
+            }
+          } catch {
+            // 개별 라인 파싱 실패는 무시
+          }
+        }
+      } catch {
+        console.log('[Claude] Vision: stream-json parse failed, using raw stdout');
+        output = stdout;
+      }
+
+      console.log(`[Claude] Vision usage: in=${usage.inputTokens}, out=${usage.outputTokens}, cost=$${usage.costUsd.toFixed(6)}`);
+      resolve({ output, stderr, exitCode: code ?? 1, durationSec: duration, usage });
+    });
+
+    proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      console.error(`[Claude] Vision process error:`, err.message);
       reject(err);
     });
   });
