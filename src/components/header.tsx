@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { PenLine, History } from 'lucide-react';
+import { PenLine, History, Palette } from 'lucide-react';
 import { ThemeToggle } from './theme-toggle';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: '글 생성', icon: PenLine },
+  { href: '/styles', label: '내 스타일', icon: Palette },
   { href: '/history', label: '히스토리', icon: History },
 ];
 

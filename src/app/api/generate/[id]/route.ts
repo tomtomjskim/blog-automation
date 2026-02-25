@@ -24,6 +24,8 @@ interface DbRow {
   error: string | null;
   created_at: string;
   completed_at: string | null;
+  image_urls: string[] | null;
+  style_profile_id: string | null;
 }
 
 export async function GET(
@@ -73,6 +75,8 @@ export async function GET(
     error: row.error,
     createdAt: row.created_at,
     completedAt: row.completed_at,
+    imageUrls: row.image_urls || [],
+    styleProfileId: row.style_profile_id,
   };
 
   return NextResponse.json(record);

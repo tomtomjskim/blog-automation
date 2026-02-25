@@ -46,6 +46,18 @@ export interface GenerationRecord {
   error: string | null;
   createdAt: string;
   completedAt: string | null;
+  imageUrls: string[];
+  styleProfileId: string | null;
+}
+
+export interface StyleProfile {
+  id: string;
+  name: string;
+  description: string | null;
+  profile: string;
+  sampleCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface GenerationProgress {

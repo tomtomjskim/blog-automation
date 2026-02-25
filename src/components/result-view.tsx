@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy, RefreshCw, History, Clock, DollarSign, FileText, Hash } from 'lucide-react';
+import { Copy, RefreshCw, History, Clock, DollarSign, FileText, Hash, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -96,6 +96,31 @@ export function ResultView({ data }: ResultViewProps) {
           </CardHeader>
           <CardContent>
             <SeoScore analysis={seoAnalysis} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 생성된 이미지 */}
+      {data.imageUrls && data.imageUrls.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ImageIcon className="h-4 w-4" />
+              생성된 이미지 ({data.imageUrls.length}장)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {data.imageUrls.map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group">
+                  <img
+                    src={url}
+                    alt={`생성 이미지 ${i + 1}`}
+                    className="w-full rounded-lg border transition-opacity group-hover:opacity-90"
+                  />
+                </a>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
