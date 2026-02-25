@@ -1,24 +1,36 @@
-# Blog Automation - Static Site Container
-FROM nginx:alpine
+FROM node:20-slim AS base
 
-# Copy static files
-COPY . /usr/share/nginx/html/
+FROM base AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --only=production
 
-# Copy nginx configuration
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+FROM base AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
 
-# Remove unnecessary files from html directory
-RUN rm -rf /usr/share/nginx/html/nginx \
-    && rm -f /usr/share/nginx/html/Dockerfile \
-    && rm -rf /usr/share/nginx/html/.git \
-    && rm -rf /usr/share/nginx/html/.claude
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Expose port
-EXPOSE 80
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost/health || exit 1
+# Claude CLI credentials 마운트 포인트
+RUN mkdir -p /home/claude/.claude
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]

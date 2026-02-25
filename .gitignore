@@ -1,5 +1,29 @@
-# Dependencies
-node_modules/
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env files
+.env*.local
+.env
+
+# typescript
+*.tsbuildinfo
 
 # IDE
 .idea/
@@ -9,26 +33,10 @@ node_modules/
 *~
 
 # OS
-.DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
-
-# Local config
-.env
-.env.local
-*.local
-
-# Build outputs (none for this project)
-dist/
-build/
-
-# Cache
+# Cache & temp
 .cache/
-
-# Temporary files
 tmp/
 temp/
 .serena/
