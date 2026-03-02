@@ -1,24 +1,30 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Sparkles, Zap, Crown, Loader2, Image as ImageIcon } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Sparkles, Zap, Crown, Loader2, Image as ImageIcon, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { TagInput } from './tag-input';
 import { ImageUpload } from './image-upload';
+import { PersonaSelector } from './persona-selector';
 import { STYLE_OPTIONS, LENGTH_OPTIONS } from '@/lib/prompts';
-import type { StyleId, LengthId, GenerationMode, StyleProfile, UploadedImage } from '@/lib/types';
+import type { StyleId, LengthId, GenerationMode, ToneId, PersonaId, StyleProfile, UploadedImage } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 export function GenerateForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [topic, setTopic] = useState('');
   const [keywords, setKeywords] = useState<string[]>([]);
   const [style, setStyle] = useState<StyleId>('casual');
-  const [length, setLength] = useState<LengthId>('medium');
+  const [length, setLength] = useState<LengthId>('standard');
   const [mode, setMode] = useState<GenerationMode>('quick');
+  const [tone, setTone] = useState<ToneId>('haeyoche');
+  const [persona, setPersona] = useState<PersonaId | null>(null);
+  const [naturalize, setNaturalize] = useState(false);
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -35,18 +41,24 @@ export function GenerateForm() {
   const [generateImages, setGenerateImages] = useState(false);
 
   useEffect(() => {
-    // 스타일 프로필 목록 로드
     fetch('/api/style-profile')
       .then(r => r.json())
       .then(setProfiles)
       .catch(() => {});
 
-    // 이미지 설정 확인
     fetch('/api/settings')
       .then(r => r.json())
       .then(data => setKlingConfigured(data.kling?.configured || false))
       .catch(() => {});
   }, []);
+
+  // 키워드 페이지에서 넘어온 파라미터 처리
+  useEffect(() => {
+    const topicParam = searchParams.get('topic');
+    const keywordsParam = searchParams.get('keywords');
+    if (topicParam) setTopic(topicParam);
+    if (keywordsParam) setKeywords(keywordsParam.split(',').filter(Boolean));
+  }, [searchParams]);
 
   const handleSubmit = async () => {
     if (!topic.trim()) {
@@ -61,7 +73,8 @@ export function GenerateForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic, keywords, style, length, mode, additionalInfo,
+          topic, keywords, style, length, mode, tone, persona,
+          naturalize, additionalInfo,
           styleProfileId: selectedProfile || null,
           generateImages,
           imageIds: uploadedImages.map(img => img.id),
@@ -128,6 +141,32 @@ export function GenerateForm() {
         </div>
       </div>
 
+      {/* 페르소나 선택 */}
+      <PersonaSelector value={persona} onChange={setPersona} />
+
+      {/* 톤 선택 */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium">문체</label>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={tone === 'haeyoche' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setTone('haeyoche')}
+          >
+            해요체
+          </Button>
+          <Button
+            type="button"
+            variant={tone === 'banmal' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setTone('banmal')}
+          >
+            반말/~다체
+          </Button>
+        </div>
+      </div>
+
       {/* 내 스타일 프로필 선택 */}
       {profiles.length > 0 && (
         <div className="space-y-2">
@@ -153,7 +192,7 @@ export function GenerateForm() {
       {/* 길이 선택 */}
       <div className="space-y-2">
         <label className="text-sm font-medium">글 길이</label>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {LENGTH_OPTIONS.map((opt) => (
             <Button
               key={opt.id}
@@ -194,6 +233,34 @@ export function GenerateForm() {
         <p className="text-xs text-muted-foreground">
           {mode === 'quick' ? 'Claude 1회 호출로 빠르게 생성합니다.' : 'Claude 2회 호출 (초안 + 고도화)으로 품질을 높입니다.'}
         </p>
+      </div>
+
+      {/* 자연화 토글 */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium">자연스러운 문체 변환</label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={naturalize}
+            onClick={() => setNaturalize(!naturalize)}
+            className={cn(
+              'relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors',
+              naturalize ? 'bg-primary' : 'bg-input',
+            )}
+          >
+            <span className={cn(
+              'pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform',
+              naturalize ? 'translate-x-4' : 'translate-x-0',
+            )} />
+          </button>
+        </div>
+        {naturalize && (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Wand2 className="h-3 w-3" />
+            AI 특유 표현을 자연스러운 구어체로 변환합니다 (추가 Claude 호출)
+          </p>
+        )}
       </div>
 
       {/* 이미지 생성 토글 */}

@@ -3,23 +3,28 @@ import { randomUUID } from 'crypto';
 import { query, queryOne } from '@/lib/db';
 import { runClaudeForBlog, runClaude, runClaudeWithImages } from '@/lib/claude';
 import { STYLE_PROMPTS, buildUserPrompt, buildFoodReviewPrompt, buildQualityReviewPrompt, buildImageAnalysisPrompt, buildImageContextBlock } from '@/lib/prompts';
-import { analyzeSEO, parseResult } from '@/lib/seo-analyzer';
+import { analyzeNaverSEO, parseResult } from '@/lib/seo-analyzer';
+import { buildPersonaSystemPrompt } from '@/lib/personas';
+import { naturalizeContent } from '@/lib/naturalization';
 import { setProgress, getRunningCount } from '@/lib/generation-store';
 import { isKlingConfigured, generateImage, buildImagePromptInstruction, parseImagePrompts } from '@/lib/kling';
 import path from 'path';
 import { stat as fsStat } from 'fs/promises';
-import type { StyleId, LengthId, GenerationMode } from '@/lib/types';
+import type { StyleId, LengthId, GenerationMode, ToneId, PersonaId } from '@/lib/types';
 
 const VALID_STYLES: StyleId[] = ['casual', 'informative', 'review', 'food_review', 'marketing', 'story'];
-const VALID_LENGTHS: LengthId[] = ['short', 'medium', 'long'];
+const VALID_LENGTHS: LengthId[] = ['short', 'medium', 'long', 'standard', 'deep', 'premium'];
 const VALID_MODES: GenerationMode[] = ['quick', 'quality'];
+const VALID_TONES: ToneId[] = ['haeyoche', 'banmal'];
+const VALID_PERSONAS: PersonaId[] = ['beauty', 'food', 'tech', 'travel', 'selfdev', 'parenting', 'finance', 'interior', 'custom'];
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      topic, keywords = [], style = 'casual', length = 'medium',
-      mode = 'quick', additionalInfo = '',
+      topic, keywords = [], style = 'casual', length = 'standard',
+      mode = 'quick', tone = 'haeyoche', persona = null,
+      naturalize = false, additionalInfo = '',
       styleProfileId = null, generateImages = false,
       imageIds = [],
     } = body;
@@ -37,8 +42,14 @@ export async function POST(request: NextRequest) {
     if (!VALID_MODES.includes(mode)) {
       return NextResponse.json({ error: `유효하지 않은 모드: ${mode}` }, { status: 400 });
     }
+    if (tone && !VALID_TONES.includes(tone)) {
+      return NextResponse.json({ error: `유효하지 않은 톤: ${tone}` }, { status: 400 });
+    }
+    if (persona && !VALID_PERSONAS.includes(persona)) {
+      return NextResponse.json({ error: `유효하지 않은 페르소나: ${persona}` }, { status: 400 });
+    }
 
-    // 동시 생성 제한 (개인 사용: 1개)
+    // 동시 생성 제한
     if (getRunningCount() >= 1) {
       return NextResponse.json({ error: '이미 생성 중인 글이 있습니다. 완료 후 다시 시도해주세요.' }, { status: 429 });
     }
@@ -46,12 +57,11 @@ export async function POST(request: NextRequest) {
     // DB에 레코드 삽입
     const id = randomUUID();
     await query(
-      `INSERT INTO generations (id, topic, keywords, style, length, mode, style_profile_id, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'running')`,
-      [id, topic.trim(), keywords, style, length, mode, styleProfileId],
+      `INSERT INTO generations (id, topic, keywords, style, length, mode, tone, persona, style_profile_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'running')`,
+      [id, topic.trim(), keywords, style, length, mode, tone || null, persona || null, styleProfileId],
     );
 
-    // 인메모리 스토어에 등록
     setProgress(id, 'running', '글 생성을 시작합니다...');
 
     // 비동기 백그라운드 실행
@@ -61,6 +71,9 @@ export async function POST(request: NextRequest) {
       style: style as StyleId,
       length: length as LengthId,
       mode: mode as GenerationMode,
+      tone: (tone || 'haeyoche') as ToneId,
+      persona: persona as PersonaId | null,
+      naturalize: !!naturalize,
       additionalInfo,
       styleProfileId,
       generateImages: generateImages && isKlingConfigured(),
@@ -84,6 +97,9 @@ async function runGeneration(
     style: StyleId;
     length: LengthId;
     mode: GenerationMode;
+    tone: ToneId;
+    persona: PersonaId | null;
+    naturalize: boolean;
     additionalInfo: string;
     styleProfileId: string | null;
     generateImages: boolean;
@@ -97,8 +113,8 @@ async function runGeneration(
     let totalOutputTokens = 0;
     let totalCost = 0;
 
-    // 시스템 프롬프트 조합: 기본 스타일 + 사용자 프로필
-    let systemPrompt = STYLE_PROMPTS[params.style];
+    // 시스템 프롬프트: 페르소나 기반 통합 빌더 사용
+    let systemPrompt = buildPersonaSystemPrompt(params.persona, params.style, params.tone);
 
     if (params.styleProfileId) {
       const profile = await queryOne<{ profile: string }>(
@@ -110,7 +126,7 @@ async function runGeneration(
       }
     }
 
-    // 0단계: 첨부 이미지 분석 (있는 경우)
+    // 0단계: 첨부 이미지 분석
     let imageContext = '';
     const attachedImageUrls: string[] = [];
     const hasImages = params.imageIds.length > 0;
@@ -121,7 +137,6 @@ async function runGeneration(
       const UPLOAD_DIR = '/app/uploads/images';
       const imagePaths: string[] = [];
 
-      // imageId로 파일 경로 매핑 (UUID.확장자 패턴 검색)
       for (const imgId of params.imageIds) {
         const safeId = imgId.replace(/[^a-f0-9-]/g, '');
         for (const ext of ['.jpg', '.png', '.webp']) {
@@ -147,11 +162,9 @@ async function runGeneration(
             totalOutputTokens += analysisResult.usage.outputTokens;
             totalCost += analysisResult.usage.costUsd;
 
-            // JSON 파싱 (코드 블록 내부일 수 있음)
             let jsonStr = analysisResult.output.trim();
             const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
             if (jsonMatch) jsonStr = jsonMatch[1].trim();
-            // 배열만 추출
             const arrMatch = jsonStr.match(/\[[\s\S]*\]/);
             if (arrMatch) jsonStr = arrMatch[0];
 
@@ -162,22 +175,18 @@ async function runGeneration(
               }
             } catch (parseErr) {
               console.error('[Generate] Image analysis JSON parse failed:', parseErr);
-              // 분석 실패 시 기본 컨텍스트 생성
-              imageContext = `\n## 첨부 이미지\n아래 이미지들이 첨부되었습니다. 글의 적절한 위치에 삽입해주세요.\n\n`;
+              imageContext = `\n## 첨부 이미지\n`;
               attachedImageUrls.forEach((url, i) => {
                 imageContext += `- ![첨부 이미지 ${i + 1}](${url})\n`;
               });
-              imageContext += '\n';
             }
           }
         } catch (imgErr) {
           console.error('[Generate] Image analysis failed:', imgErr);
-          // 분석 실패해도 URL은 전달
-          imageContext = `\n## 첨부 이미지\n아래 이미지들이 첨부되었습니다. 글의 적절한 위치에 삽입해주세요.\n\n`;
+          imageContext = `\n## 첨부 이미지\n`;
           attachedImageUrls.forEach((url, i) => {
             imageContext += `- ![첨부 이미지 ${i + 1}](${url})\n`;
           });
-          imageContext += '\n';
         }
       }
     }
@@ -188,7 +197,8 @@ async function runGeneration(
       : buildUserPrompt(promptParams);
 
     // 1단계: 초안 생성
-    const totalSteps = (hasImages ? 1 : 0) + (params.mode === 'quality' ? 2 : 1) + (params.generateImages ? 1 : 0);
+    const hasNaturalize = params.naturalize;
+    const totalSteps = (hasImages ? 1 : 0) + (params.mode === 'quality' ? 2 : 1) + (params.generateImages ? 1 : 0) + (hasNaturalize ? 1 : 0);
     let step = 1;
     setProgress(id, 'running', `글을 생성하고 있습니다... (${step}/${totalSteps} 단계)`);
 
@@ -218,14 +228,34 @@ async function runGeneration(
       }
     }
 
-    // 이미지 URL 수집: 첨부 이미지 + Kling 생성 이미지
+    // 자연화 단계
+    let naturalizationScore: number | null = null;
+    let naturalizationChanges: unknown = null;
+
+    if (hasNaturalize) {
+      step++;
+      setProgress(id, 'running', `문체를 자연화하고 있습니다... (${step}/${totalSteps} 단계)`);
+      try {
+        const natResult = await naturalizeContent(finalOutput);
+        finalOutput = natResult.naturalizedContent;
+        naturalizationScore = natResult.score;
+        naturalizationChanges = natResult.changes;
+        totalInputTokens += natResult.inputTokens;
+        totalOutputTokens += natResult.outputTokens;
+        totalCost += natResult.costUsd;
+      } catch (natErr) {
+        console.error('[Generate] Naturalization failed:', natErr);
+        // 자연화 실패해도 글 생성은 완료 처리
+      }
+    }
+
+    // 이미지 URL 수집
     let imageUrls: string[] = [...attachedImageUrls];
     if (params.generateImages) {
       step++;
       setProgress(id, 'running', `이미지를 생성하고 있습니다... (${step}/${totalSteps} 단계)`);
 
       try {
-        // Claude로 이미지 프롬프트 생성
         const imgPromptReq = `다음 블로그 글의 핵심 주제를 시각적으로 표현하는 영문 이미지 프롬프트를 2개 생성해주세요.\n\n블로그 글:\n${finalOutput.slice(0, 2000)}\n${buildImagePromptInstruction(2)}`;
         const imgPromptResult = await runClaude(imgPromptReq, { timeout: 60000 });
 
@@ -235,14 +265,9 @@ async function runGeneration(
           totalCost += imgPromptResult.usage.costUsd;
 
           const prompts = parseImagePrompts(imgPromptResult.output);
-          // 각 프롬프트로 Kling 이미지 생성 (순차)
           for (const prompt of prompts.slice(0, 2)) {
             try {
-              const imgResult = await generateImage({
-                prompt,
-                aspectRatio: '16:9',
-                count: 1,
-              });
+              const imgResult = await generateImage({ prompt, aspectRatio: '16:9', count: 1 });
               imageUrls.push(...imgResult.imageUrls);
             } catch (imgErr) {
               console.error(`[Generate] Image generation failed:`, imgErr);
@@ -251,13 +276,12 @@ async function runGeneration(
         }
       } catch (imgErr) {
         console.error(`[Generate] Image prompt generation failed:`, imgErr);
-        // 이미지 실패해도 글 생성은 완료 처리
       }
     }
 
     // 결과 파싱
     const parsed = parseResult(finalOutput);
-    const seo = analyzeSEO(finalOutput, params.keywords);
+    const seo = analyzeNaverSEO(finalOutput, params.keywords);
     const durationSec = Math.round((Date.now() - startTime) / 1000);
 
     // DB 업데이트
@@ -266,11 +290,13 @@ async function runGeneration(
         title = $2, content = $3, char_count = $4, read_time = $5,
         headings = $6, seo_score = $7, input_tokens = $8, output_tokens = $9,
         cost_usd = $10, duration_sec = $11, image_urls = $12,
+        naturalization_score = $13, naturalization_changes = $14,
         status = 'completed', completed_at = NOW()
       WHERE id = $1`,
       [id, parsed.title, finalOutput, parsed.charCount, parsed.readTime,
        parsed.headings, seo.score, totalInputTokens, totalOutputTokens,
-       totalCost, durationSec, imageUrls],
+       totalCost, durationSec, imageUrls,
+       naturalizationScore, naturalizationChanges ? JSON.stringify(naturalizationChanges) : null],
     );
 
     setProgress(id, 'completed', '완료!');

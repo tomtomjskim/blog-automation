@@ -1,4 +1,4 @@
-import type { StyleId, LengthId } from './types';
+import type { StyleId, LengthId, ToneId } from './types';
 
 // 글 스타일별 시스템 프롬프트
 export const STYLE_PROMPTS: Record<StyleId, string> = {
@@ -101,12 +101,39 @@ export const STYLE_PROMPTS: Record<StyleId, string> = {
 - 광고성/협찬 느낌의 문체`,
 };
 
-// 글 길이 설정
+// 글 길이 설정 (확장)
 export const LENGTH_CONFIG: Record<LengthId, { chars: number; label: string }> = {
-  short:  { chars: 500,  label: '짧게 (~500자)' },
-  medium: { chars: 1000, label: '보통 (~1000자)' },
-  long:   { chars: 2000, label: '길게 (~2000자)' },
+  short:    { chars: 500,  label: '짧게 (~500자)' },
+  medium:   { chars: 1000, label: '보통 (~1000자)' },
+  long:     { chars: 2000, label: '길게 (~2000자)' },
+  standard: { chars: 2000, label: '표준 (~2000자)' },
+  deep:     { chars: 3000, label: '심층 (~3000자)' },
+  premium:  { chars: 5000, label: '프리미엄 (~5000자)' },
 };
+
+// 톤 설정
+export const TONE_INSTRUCTIONS: Record<ToneId, string> = {
+  haeyoche: `문체 규칙 (해요체):
+- 모든 문장을 "~해요", "~이에요", "~인데요", "~거든요" 등 해요체로 작성
+- 존댓말이지만 부드럽고 친근한 느낌
+- 예: "정말 좋았어요", "추천드려요", "한번 해보세요"`,
+
+  banmal: `문체 규칙 (반말/~다 체):
+- 모든 문장을 "~했다", "~이다", "~인데", "~거든" 등 반말체로 작성
+- 일기/에세이 같은 솔직한 느낌
+- 예: "정말 좋았다", "강력 추천한다", "한번 해보길"`,
+};
+
+// AI 특유 표현 금지 목록
+const AI_FORBIDDEN_PHRASES = `
+절대 사용하지 말 것 (AI 탐지 회피):
+- "이로써", "결론적으로", "매우 중요합니다", "다양한 측면에서"
+- "종합적으로", "기본적으로", "핵심적으로", "궁극적으로"
+- "~할 수 있습니다", "~하는 것이 좋습니다" (과도 반복 시)
+- "무엇보다", "특히나", "그야말로", "과언이 아닙니다"
+- "알아보겠습니다", "살펴보겠습니다" (서론에서)
+- 동일 접속사 3회 이상 연속 사용
+- 문단 시작 패턴 반복 ("먼저...", "다음으로...", "마지막으로..." 연속)`;
 
 // 스타일 옵션 목록
 export const STYLE_OPTIONS = [
@@ -118,11 +145,13 @@ export const STYLE_OPTIONS = [
   { id: 'story' as StyleId,       name: '스토리형', icon: '📖', description: '몰입감 있는 이야기체' },
 ];
 
-// 길이 옵션 목록
+// 길이 옵션 목록 (5종 확장)
 export const LENGTH_OPTIONS = [
-  { id: 'short' as LengthId,  label: '짧게 (~500자)' },
-  { id: 'medium' as LengthId, label: '보통 (~1000자)' },
-  { id: 'long' as LengthId,   label: '길게 (~2000자)' },
+  { id: 'short' as LengthId,    label: '짧게 (~500자)' },
+  { id: 'medium' as LengthId,   label: '보통 (~1000자)' },
+  { id: 'standard' as LengthId, label: '표준 (~2000자)' },
+  { id: 'deep' as LengthId,     label: '심층 (~3000자)' },
+  { id: 'premium' as LengthId,  label: '프리미엄 (~5000자)' },
 ];
 
 /** 이미지 분석 프롬프트 빌더 — 이미지 내용 분석 + 배치 제안 JSON */
@@ -137,12 +166,17 @@ ${topic}
 ## 글쓰기 스타일
 ${style}
 
+## 이미지 배치 원칙 (네이버 최적화)
+- 첫 이미지: 도입부 직후 (네이버 썸네일 용도, 3:2 비율 권장)
+- 이후: 각 H2 섹션 뒤 1장씩 배치
+- alt 텍스트에 키워드 자연스럽게 포함
+
 ## 응답 형식 (JSON)
 다음 JSON 배열로 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:
 [
   {
     "imageIndex": 0,
-    "description": "이미지에 대한 간결한 설명 (alt 텍스트용)",
+    "description": "이미지에 대한 간결한 설명 (alt 텍스트용, 키워드 포함)",
     "suggestedSection": "이미지를 배치할 소제목/섹션 제안",
     "context": "이미지가 글에 기여하는 맥락 설명 (1-2문장)"
   }
@@ -171,15 +205,17 @@ export function buildImageContextBlock(
   return block;
 }
 
-/** 일반 블로그 글 프롬프트 빌더 */
+/** 일반 블로그 글 프롬프트 빌더 (네이버 최적화 강화) */
 export function buildUserPrompt(params: {
   topic: string;
   keywords: string[];
   length: LengthId;
+  tone?: ToneId;
   additionalInfo?: string;
   imageContext?: string;
 }): string {
-  const lengthGuide = LENGTH_CONFIG[params.length]?.label || '약 1000자 내외';
+  const lengthConfig = LENGTH_CONFIG[params.length];
+  const charTarget = lengthConfig?.chars || 1000;
 
   let prompt = `다음 조건으로 네이버 블로그 글을 작성해주세요.
 
@@ -190,8 +226,12 @@ ${params.topic}
 ${params.keywords.length > 0 ? params.keywords.join(', ') : '(키워드 없음 - 주제에서 자동 추출)'}
 
 ## 글 길이
-${lengthGuide}
+약 ${charTarget}자 내외 (${lengthConfig?.label || '보통'})
 `;
+
+  if (params.tone) {
+    prompt += `\n## 문체\n${TONE_INSTRUCTIONS[params.tone]}\n`;
+  }
 
   if (params.additionalInfo) {
     prompt += `\n## 추가 정보\n${params.additionalInfo}\n`;
@@ -202,27 +242,45 @@ ${lengthGuide}
   }
 
   prompt += `
-## 작성 요청사항
-1. 제목을 # 마크다운으로 먼저 작성 (흥미롭고 클릭하고 싶은 제목)
+## 네이버 블로그 최적 구조 (필수)
+
+### 글 구조
+1. **도입부** (200-300자): 공감 유도 + 주키워드 자연 삽입. "~해보신 적 있으시죠?" 등 독자 참여형 시작.
+2. **본문 H2 섹션 3-5개** (각 300-500자):
+   - 각 섹션 제목에 키워드 또는 관련어 포함
+   - 경험 기반 서술 위주 ("실제로 해봤는데...", "써보니까..." 등)
+   - 리스트, 비교표, 팁 박스 등 가독성 요소 활용
+3. **마무리** (100-200자): 핵심 요약 + 독자 행동 유도
+
+### 경험담 삽입 (필수)
+- 최소 1개 섹션에 "실제로 해봤는데..." 또는 "직접 써보니..." 류의 1인칭 경험담 포함
+- 구체적 수치나 기간 포함 시 가산점 (예: "3개월간 써본 결과")
+
+### 작성 규칙
+1. 제목을 # 마크다운으로 먼저 작성 (15-25자, 키워드 선두 배치)
 2. 소제목은 ## 마크다운으로 구조화 (3-5개 섹션)
-3. 키워드를 자연스럽게 포함 (SEO 고려)
-4. 네이버 블로그에 바로 복사해서 사용할 수 있는 형태로 작성
-5. 마크다운 형식 유지
+3. 키워드를 자연스럽게 3-5회 포함 (스터핑 금지)
+4. 문단은 100-200자 단위로 끊어 가독성 확보
+5. 네이버 블로그에 바로 복사해서 사용할 수 있는 마크다운 형식
+
+${AI_FORBIDDEN_PHRASES}
 
 글을 작성해주세요:`;
 
   return prompt;
 }
 
-/** 음식 리뷰 전용 프롬프트 빌더 */
+/** 음식 리뷰 전용 프롬프트 빌더 (네이버 최적화) */
 export function buildFoodReviewPrompt(params: {
   topic: string;
   keywords: string[];
   length: LengthId;
+  tone?: ToneId;
   additionalInfo?: string;
   imageContext?: string;
 }): string {
-  const lengthGuide = LENGTH_CONFIG[params.length]?.label || '약 1000자 내외';
+  const lengthConfig = LENGTH_CONFIG[params.length];
+  const charTarget = lengthConfig?.chars || 1000;
 
   let prompt = `다음 조건으로 음식점 리뷰 블로그 글을 작성해주세요.
 
@@ -233,8 +291,12 @@ ${params.topic}
 ${params.keywords.length > 0 ? params.keywords.join(', ') : '(음식점명, 메뉴명, 위치 등에서 자동 추출)'}
 
 ## 글 길이
-${lengthGuide}
+약 ${charTarget}자 내외 (${lengthConfig?.label || '보통'})
 `;
+
+  if (params.tone) {
+    prompt += `\n## 문체\n${TONE_INSTRUCTIONS[params.tone]}\n`;
+  }
 
   if (params.additionalInfo) {
     prompt += `\n## 추가 정보 (맛, 분위기, 가격 등)\n${params.additionalInfo}\n`;
@@ -245,21 +307,33 @@ ${lengthGuide}
   }
 
   prompt += `
-## 음식 리뷰 필수 포함사항
+## 네이버 맛집리뷰 최적 구조 (필수)
+
+### 글 구조
+1. **도입부** (200-300자): 가게 발견 경위 + 방문 동기
+2. **가게 소개** (H2): 위치, 외관, 분위기
+3. **메뉴 리뷰** (H2, 가장 긴 섹션): 5감 묘사, 각 메뉴별 평가
+4. **실용 정보** (H2): 가격, 주차, 영업시간, 예약, 추천 상황
+5. **총평** (H2): 별점 + 한줄 요약 + 재방문 의사
+
+### 음식 리뷰 필수 포함사항
 1. **총평 및 별점** (5점 만점) - 맛/서비스/분위기/가성비 세부 평가
 2. **맛 표현** (5감 활용) - 식감, 향, 온도, 비주얼 등 구체적 묘사
 3. **실용 정보** - 1인 예상 비용, 위치, 주차, 영업시간, 예약 여부, 추천 상황
 4. **사진 배치** - [사진: 설명] 형태로 표시
 
-## 작성 형식
-1. 제목을 # 마크다운으로 먼저 작성
+### 작성 규칙
+1. 제목을 # 마크다운으로 먼저 작성 (15-25자, 키워드 선두 배치)
 2. 소제목은 ## 마크다운으로 구조화
-3. 마크다운 형식 유지
+3. 경험 기반 서술 필수 ("직접 가봤는데...", "먹어보니...")
+4. 마크다운 형식 유지
 
-## 주의사항
-- 과장된 표현 자제
+### 주의사항
+- 과장된 표현 자제 ("최고의", "역대급", "미쳤다" 등 금지)
 - 확인되지 않은 정보는 "확인 필요"로 표시
 - 장점과 단점 균형있게 서술
+
+${AI_FORBIDDEN_PHRASES}
 
 글을 작성해주세요:`;
 
@@ -286,5 +360,42 @@ ${draft}
 - 마크다운 형식 유지 (# 제목, ## 소제목)
 - 글 길이를 10-20% 정도 늘려도 됨
 
+${AI_FORBIDDEN_PHRASES}
+
 고도화된 글을 작성해주세요:`;
+}
+
+/** 자연화 후처리 프롬프트 */
+export function buildNaturalizationPrompt(draft: string): string {
+  return `당신은 AI가 작성한 텍스트를 인간이 쓴 것처럼 자연스럽게 수정하는 전문가입니다.
+
+## 원문
+${draft}
+
+## 자연화 작업 지침
+
+### A단계: AI 어휘 치환
+- "이로써" → 삭제 또는 "그래서"
+- "결론적으로" → "정리하면" 또는 삭제
+- "매우 중요합니다" → "꽤 중요하더라고요" 또는 "이게 핵심이에요"
+- "다양한 측면에서" → 삭제
+- 동일 접속사 연속 사용 → 다른 접속사로 교체 또는 삭제
+- 과도한 존칭/격식 → 자연스러운 구어체
+
+### B단계: 문장 리듬 변동
+- 지나치게 균일한 문장 길이 → 짧은 문장(10자 내외)과 긴 문장(50자+) 섞기
+- 가끔 "진짜요.", "솔직히.", "근데요." 같은 초단문 삽입
+- 접속사 없이 문장 바로 이어붙이기 간간이 사용
+
+### C단계: 경험 표현 보강
+- "제가 직접 해봤는데", "솔직히 말하면", "개인적으로는" 등 1인칭 표현 자연스럽게 삽입
+- 구체적 숫자/기간 추가 (있는 경우)
+
+### D단계: 구조 변동
+- 첫 문장의 시작 패턴을 자연스럽게 변경
+- "오늘은 ~에 대해 알아보겠습니다" 같은 정형화된 도입부 → 에피소드나 질문으로 시작
+
+## 응답 형식
+자연화된 글 전문만 출력하세요. 제목(#)과 소제목(##) 마크다운 형식을 유지하세요.
+설명이나 코멘트 없이 글만 작성하세요.`;
 }

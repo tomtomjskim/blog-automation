@@ -10,6 +10,8 @@ interface DbRow {
   style: string;
   length: string;
   mode: string;
+  tone: string | null;
+  persona: string | null;
   title: string | null;
   content: string | null;
   char_count: number | null;
@@ -26,6 +28,12 @@ interface DbRow {
   completed_at: string | null;
   image_urls: string[] | null;
   style_profile_id: string | null;
+  naturalization_score: number | null;
+  naturalization_changes: unknown;
+  naver_post_id: string | null;
+  naver_post_url: string | null;
+  published_at: string | null;
+  publish_status: string;
 }
 
 export async function GET(
@@ -34,7 +42,7 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // 인메모리 스토어에서 진행 상태 확인 (running일 때 빠른 응답)
+  // 인메모리 스토어에서 진행 상태 확인
   const progress = getProgress(id);
   if (progress && progress.status === 'running') {
     return NextResponse.json({
@@ -61,6 +69,8 @@ export async function GET(
     style: row.style as GenerationRecord['style'],
     length: row.length as GenerationRecord['length'],
     mode: row.mode as GenerationRecord['mode'],
+    tone: (row.tone as GenerationRecord['tone']) || null,
+    persona: (row.persona as GenerationRecord['persona']) || null,
     title: row.title,
     content: row.content,
     charCount: row.char_count,
@@ -77,6 +87,12 @@ export async function GET(
     completedAt: row.completed_at,
     imageUrls: row.image_urls || [],
     styleProfileId: row.style_profile_id,
+    naturalizationScore: row.naturalization_score,
+    naturalizationChanges: Array.isArray(row.naturalization_changes) ? row.naturalization_changes : null,
+    naverPostId: row.naver_post_id,
+    naverPostUrl: row.naver_post_url,
+    publishedAt: row.published_at,
+    publishStatus: (row.publish_status as GenerationRecord['publishStatus']) || 'none',
   };
 
   return NextResponse.json(record);

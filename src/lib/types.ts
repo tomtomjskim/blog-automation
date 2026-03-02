@@ -1,7 +1,13 @@
 export type StyleId = 'casual' | 'informative' | 'review' | 'food_review' | 'marketing' | 'story';
-export type LengthId = 'short' | 'medium' | 'long';
+export type LengthId = 'short' | 'medium' | 'long' | 'standard' | 'deep' | 'premium';
+export type ToneId = 'haeyoche' | 'banmal';
+export type PersonaId =
+  | 'beauty' | 'food' | 'tech' | 'travel'
+  | 'selfdev' | 'parenting' | 'finance' | 'interior'
+  | 'custom';
 export type GenerationMode = 'quick' | 'quality';
 export type GenerationStatus = 'running' | 'completed' | 'failed';
+export type PublishStatus = 'none' | 'draft' | 'published' | 'failed';
 
 export interface StyleOption {
   id: StyleId;
@@ -31,8 +37,11 @@ export interface GenerateRequest {
   style?: StyleId;
   length?: LengthId;
   mode?: GenerationMode;
+  tone?: ToneId;
+  persona?: PersonaId;
   additionalInfo?: string;
   imageIds?: string[];
+  naturalize?: boolean;
 }
 
 export interface GenerationRecord {
@@ -42,6 +51,8 @@ export interface GenerationRecord {
   style: StyleId;
   length: LengthId;
   mode: GenerationMode;
+  tone: ToneId | null;
+  persona: PersonaId | null;
   title: string | null;
   content: string | null;
   charCount: number | null;
@@ -58,6 +69,18 @@ export interface GenerationRecord {
   completedAt: string | null;
   imageUrls: string[];
   styleProfileId: string | null;
+  naturalizationScore: number | null;
+  naturalizationChanges: NaturalizationChange[] | null;
+  naverPostId: string | null;
+  naverPostUrl: string | null;
+  publishedAt: string | null;
+  publishStatus: PublishStatus;
+}
+
+export interface NaturalizationChange {
+  type: 'vocab' | 'sentence' | 'experience' | 'structure';
+  original: string;
+  replaced: string;
 }
 
 export interface StyleProfile {
@@ -87,4 +110,58 @@ export interface SeoAnalysis {
   score: number;
   maxScore: number;
   items: SeoItem[];
+  suggestions?: string[];
+}
+
+export interface PersonaConfig {
+  id: PersonaId;
+  name: string;
+  icon: string;
+  description: string;
+  systemPrompt: string;
+  emojiSet: string[];
+  structureTemplate: string;
+}
+
+export interface NaverBlogConfig {
+  blogId: string;
+  password: string;
+}
+
+export interface ScheduledPost {
+  id: string;
+  topic: string;
+  keywords: string[];
+  style: StyleId;
+  length: LengthId;
+  persona: PersonaId | null;
+  tone: ToneId | null;
+  scheduledAt: string;
+  generationId: string | null;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  autoPublish: boolean;
+  createdAt: string;
+}
+
+export interface KeywordResearch {
+  id: string;
+  topic: string;
+  primaryKeyword: string;
+  secondaryKeywords: string[];
+  longTailKeywords: string[];
+  userNotes: string | null;
+  manualVolume: number | null;
+  manualDifficulty: number | null;
+  createdAt: string;
+}
+
+export interface PostMetric {
+  id: string;
+  generationId: string;
+  recordedAt: string;
+  views: number | null;
+  uniqueVisitors: number | null;
+  keywordRank: number | null;
+  keyword: string | null;
+  notes: string | null;
 }
