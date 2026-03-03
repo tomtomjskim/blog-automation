@@ -1,4 +1,5 @@
-import type { StyleId, LengthId, ToneId } from './types';
+import type { StyleId, LengthId, ToneId, TemplateData } from './types';
+import { buildPromptHints } from './style-templates';
 
 // 글 스타일별 시스템 프롬프트
 export const STYLE_PROMPTS: Record<StyleId, string> = {
@@ -213,6 +214,8 @@ export function buildUserPrompt(params: {
   tone?: ToneId;
   additionalInfo?: string;
   imageContext?: string;
+  style?: StyleId;
+  templateData?: TemplateData;
 }): string {
   const lengthConfig = LENGTH_CONFIG[params.length];
   const charTarget = lengthConfig?.chars || 1000;
@@ -235,6 +238,14 @@ ${params.keywords.length > 0 ? params.keywords.join(', ') : '(키워드 없음 -
 
   if (params.additionalInfo) {
     prompt += `\n## 추가 정보\n${params.additionalInfo}\n`;
+    prompt += `\n**정보 정확성 원칙**: 사용자가 제공하지 않은 구체적 정보(가격, 위치, 전화번호, 영업시간 등)는 절대 추측하거나 임의로 작성하지 마세요. 확인할 수 없는 정보는 "[확인 필요]" 또는 "(정확한 정보는 방문 전 확인해주세요)" 등으로 표시하세요.\n`;
+  }
+
+  if (params.style && params.templateData) {
+    const hints = buildPromptHints(params.templateData, params.style);
+    if (hints) {
+      prompt += hints;
+    }
   }
 
   if (params.imageContext) {
@@ -278,6 +289,7 @@ export function buildFoodReviewPrompt(params: {
   tone?: ToneId;
   additionalInfo?: string;
   imageContext?: string;
+  templateData?: TemplateData;
 }): string {
   const lengthConfig = LENGTH_CONFIG[params.length];
   const charTarget = lengthConfig?.chars || 1000;
@@ -300,6 +312,14 @@ ${params.keywords.length > 0 ? params.keywords.join(', ') : '(음식점명, 메�
 
   if (params.additionalInfo) {
     prompt += `\n## 추가 정보 (맛, 분위기, 가격 등)\n${params.additionalInfo}\n`;
+    prompt += `\n**정보 정확성 원칙**: 사용자가 제공하지 않은 구체적 정보(가격, 위치, 전화번호, 영업시간 등)는 절대 추측하거나 임의로 작성하지 마세요. 확인할 수 없는 정보는 "[확인 필요]" 또는 "(정확한 정보는 방문 전 확인해주세요)" 등으로 표시하세요.\n`;
+  }
+
+  if (params.templateData) {
+    const hints = buildPromptHints(params.templateData, 'food_review');
+    if (hints) {
+      prompt += hints;
+    }
   }
 
   if (params.imageContext) {

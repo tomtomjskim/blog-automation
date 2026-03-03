@@ -165,3 +165,15 @@ export interface PostMetric {
   keyword: string | null;
   notes: string | null;
 }
+
+export interface TemplateField {
+  key: string;
+  label: string;
+  placeholder: string;
+  type: 'input' | 'textarea' | 'rating' | 'toggle' | 'select';
+  rows?: number;
+  group?: string;
+  options?: string[];
+}
+
+export type TemplateData = Record<string, string>;

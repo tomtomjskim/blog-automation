@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { PenLine, History, Palette, Search, CalendarDays, BarChart3, Settings } from 'lucide-react';
+import { PenLine, History, Palette, Search, CalendarDays, BarChart3, Settings, Brush } from 'lucide-react';
 import { ThemeToggle } from './theme-toggle';
 import { cn } from '@/lib/utils';
 
@@ -11,6 +11,7 @@ const navItems = [
   { href: '/styles', label: '내 스타일', icon: Palette },
   { href: '/keywords', label: '키워드', icon: Search },
   { href: '/calendar', label: '캘린더', icon: CalendarDays },
+  { href: '/custom-styles', label: '커스텀', icon: Brush },
   { href: '/history', label: '히스토리', icon: History },
   { href: '/dashboard', label: '대시보드', icon: BarChart3 },
   { href: '/settings', label: '설정', icon: Settings },

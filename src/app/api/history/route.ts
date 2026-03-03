@@ -8,6 +8,8 @@ interface HistoryRow {
   style: string;
   length: string;
   mode: string;
+  tone: string | null;
+  persona: string | null;
   title: string | null;
   char_count: number | null;
   read_time: number | null;
@@ -45,7 +47,7 @@ export async function GET(request: NextRequest) {
   const where = conditions.join(' AND ');
 
   const rows = await query<HistoryRow>(
-    `SELECT id, topic, keywords, style, length, mode, title, char_count, read_time,
+    `SELECT id, topic, keywords, style, length, mode, tone, persona, title, char_count, read_time,
             seo_score, status, cost_usd, duration_sec, created_at
      FROM generations
      WHERE ${where}

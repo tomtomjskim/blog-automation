@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Search, Trash2, FileText, Clock } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, Trash2, FileText, Clock, RotateCcw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,7 +15,11 @@ interface HistoryItem {
   topic: string;
   title: string | null;
   style: string;
+  length: string;
   mode: string;
+  tone: string | null;
+  persona: string | null;
+  keywords: string[];
   charCount: number | null;
   readTime: number | null;
   seoScore: number | null;
@@ -23,6 +28,7 @@ interface HistoryItem {
 }
 
 export function HistoryList() {
+  const router = useRouter();
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [search, setSearch] = useState('');
   const [styleFilter, setStyleFilter] = useState('');
@@ -62,6 +68,17 @@ export function HistoryList() {
     e.preventDefault();
     setPage(1);
     fetchHistory();
+  };
+
+  const handleReuse = (item: HistoryItem) => {
+    const params = new URLSearchParams();
+    params.set('topic', item.topic);
+    if (item.keywords?.length) params.set('keywords', item.keywords.join(','));
+    if (item.style) params.set('style', item.style);
+    if (item.tone) params.set('tone', item.tone);
+    if (item.length) params.set('length', item.length);
+    if (item.persona) params.set('persona', item.persona);
+    router.push(`/?${params.toString()}`);
   };
 
   const getStyleLabel = (styleId: string) => {
@@ -126,14 +143,25 @@ export function HistoryList() {
                     </span>
                   </div>
                 </Link>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDelete(item.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-primary"
+                    onClick={() => handleReuse(item)}
+                    title="이 설정으로 다시 쓰기"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleDelete(item.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}

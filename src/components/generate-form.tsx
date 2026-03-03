@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Sparkles, Zap, Crown, Loader2, Image as ImageIcon, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,9 +9,20 @@ import { Card, CardContent } from '@/components/ui/card';
 import { TagInput } from './tag-input';
 import { ImageUpload } from './image-upload';
 import { PersonaSelector } from './persona-selector';
+import { StyleTemplateFields } from './style-template-fields';
 import { STYLE_OPTIONS, LENGTH_OPTIONS } from '@/lib/prompts';
-import type { StyleId, LengthId, GenerationMode, ToneId, PersonaId, StyleProfile, UploadedImage } from '@/lib/types';
+import { serializeTemplateData, getStyleSpecificKeys, deserializeTemplateData } from '@/lib/style-templates';
+import type { StyleId, LengthId, GenerationMode, ToneId, PersonaId, StyleProfile, UploadedImage, TemplateData, TemplateField } from '@/lib/types';
 import { cn } from '@/lib/utils';
+
+interface CustomStyle {
+  id: string;
+  name: string;
+  icon: string;
+  description: string | null;
+  systemPrompt: string;
+  fields: TemplateField[];
+}
 
 export function GenerateForm() {
   const router = useRouter();
@@ -25,7 +36,7 @@ export function GenerateForm() {
   const [tone, setTone] = useState<ToneId>('haeyoche');
   const [persona, setPersona] = useState<PersonaId | null>(null);
   const [naturalize, setNaturalize] = useState(false);
-  const [additionalInfo, setAdditionalInfo] = useState('');
+  const [templateData, setTemplateData] = useState<TemplateData>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,6 +51,9 @@ export function GenerateForm() {
   const [klingConfigured, setKlingConfigured] = useState(false);
   const [generateImages, setGenerateImages] = useState(false);
 
+  // 커스텀 스타일
+  const [customStyles, setCustomStyles] = useState<CustomStyle[]>([]);
+
   useEffect(() => {
     fetch('/api/style-profile')
       .then(r => r.json())
@@ -50,14 +64,54 @@ export function GenerateForm() {
       .then(r => r.json())
       .then(data => setKlingConfigured(data.kling?.configured || false))
       .catch(() => {});
+
+    fetch('/api/custom-styles')
+      .then(r => r.json())
+      .then(setCustomStyles)
+      .catch(() => {});
   }, []);
 
-  // 키워드 페이지에서 넘어온 파라미터 처리
+  // 스타일 변경 시 이전 스타일 전용 필드 초기화 (freeform 보존)
+  const prevStyleRef = useRef(style);
+  useEffect(() => {
+    const prevStyle = prevStyleRef.current;
+    if (prevStyle !== style) {
+      const keysToReset = getStyleSpecificKeys(prevStyle);
+      if (keysToReset.length > 0) {
+        setTemplateData(prev => {
+          const next = { ...prev };
+          for (const key of keysToReset) {
+            delete next[key];
+          }
+          return next;
+        });
+      }
+      prevStyleRef.current = style;
+    }
+  }, [style]);
+
+  // 외부에서 넘어온 파라미터 처리 (키워드 페이지, 히스토리 재사용)
   useEffect(() => {
     const topicParam = searchParams.get('topic');
     const keywordsParam = searchParams.get('keywords');
+    const styleParam = searchParams.get('style') as StyleId | null;
+    const toneParam = searchParams.get('tone') as ToneId | null;
+    const lengthParam = searchParams.get('length') as LengthId | null;
+    const personaParam = searchParams.get('persona') as PersonaId | null;
+    const additionalInfoParam = searchParams.get('additionalInfo');
+
     if (topicParam) setTopic(topicParam);
     if (keywordsParam) setKeywords(keywordsParam.split(',').filter(Boolean));
+    if (styleParam && ['casual','informative','review','food_review','marketing','story'].includes(styleParam)) {
+      setStyle(styleParam);
+    }
+    if (toneParam && ['haeyoche','banmal'].includes(toneParam)) setTone(toneParam);
+    if (lengthParam) setLength(lengthParam);
+    if (personaParam) setPersona(personaParam);
+    if (additionalInfoParam && styleParam) {
+      const decoded = decodeURIComponent(additionalInfoParam);
+      setTemplateData(deserializeTemplateData(decoded, styleParam));
+    }
   }, [searchParams]);
 
   const handleSubmit = async () => {
@@ -69,12 +123,19 @@ export function GenerateForm() {
     setLoading(true);
 
     try {
+      // 커스텀 스타일인 경우 실제 스타일은 'casual'로, 커스텀 프롬프트를 additionalInfo에 합류
+      const isCustom = style.startsWith('custom:');
+      const actualStyle = isCustom ? 'casual' : style;
+      const customStyle = isCustom ? customStyles.find(cs => `custom:${cs.id}` === style) : null;
+
+      const additionalInfo = serializeTemplateData(templateData, isCustom ? 'casual' : style);
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic, keywords, style, length, mode, tone, persona,
-          naturalize, additionalInfo,
+          topic, keywords, style: actualStyle as StyleId, length, mode, tone, persona,
+          naturalize, additionalInfo: additionalInfo || undefined,
+          customSystemPrompt: customStyle?.systemPrompt || undefined,
           styleProfileId: selectedProfile || null,
           generateImages,
           imageIds: uploadedImages.map(img => img.id),
@@ -133,6 +194,26 @@ export function GenerateForm() {
                   <div>
                     <div className="text-sm font-medium">{opt.name}</div>
                     <div className="text-xs text-muted-foreground">{opt.description}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+          {customStyles.map((cs) => (
+            <Card
+              key={`custom-${cs.id}`}
+              className={cn(
+                'cursor-pointer transition-all hover:border-primary/50',
+                style === (`custom:${cs.id}` as StyleId) && 'border-primary ring-1 ring-primary',
+              )}
+              onClick={() => setStyle(`custom:${cs.id}` as StyleId)}
+            >
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{cs.icon}</span>
+                  <div>
+                    <div className="text-sm font-medium">{cs.name}</div>
+                    <div className="text-xs text-muted-foreground">{cs.description || '커스텀 스타일'}</div>
                   </div>
                 </div>
               </CardContent>
@@ -305,16 +386,16 @@ export function GenerateForm() {
         </p>
       </div>
 
-      {/* 추가 정보 */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">추가 정보 (선택)</label>
-        <Textarea
-          placeholder="포함할 내용, 참고 정보, 특별한 요청사항..."
-          value={additionalInfo}
-          onChange={(e) => setAdditionalInfo(e.target.value)}
-          rows={2}
-        />
-      </div>
+      {/* 스타일별 추가 입력 + 자유 입력 */}
+      <StyleTemplateFields
+        style={style}
+        data={templateData}
+        onChange={setTemplateData}
+        customFields={style.startsWith('custom:')
+          ? customStyles.find(cs => `custom:${cs.id}` === style)?.fields
+          : undefined
+        }
+      />
 
       {/* 에러 메시지 */}
       {error && <p className="text-sm text-destructive">{error}</p>}
