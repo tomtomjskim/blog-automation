@@ -2,11 +2,12 @@
 
 import { useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StyleTemplateFields } from '@/components/style-template';
 import { serializeTemplateData, getStyleSpecificKeys } from '@/lib/style-templates';
 import type { StyleProfile } from '@/lib/types';
+import { cn } from '@/lib/utils';
 import { useFormState } from './hooks/use-form-state';
 import { useFormInit } from './hooks/use-form-init';
 import { useExternalData } from './hooks/use-external-data';
@@ -40,6 +41,7 @@ export function GenerateForm() {
   } = useFormState();
 
   const [profiles, setProfiles] = useState<StyleProfile[]>([]);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // 외부 데이터 fetch
   useExternalData({ setProfiles, setKlingConfigured, setCustomStyles });
@@ -145,10 +147,21 @@ export function GenerateForm() {
         setSelectedProfile={setSelectedProfile}
       />
 
-      <MediaSection
-        uploadedImages={uploadedImages}
-        setUploadedImages={setUploadedImages}
-      />
+      {/* 고급 옵션 (접기/펼치기) */}
+      <button
+        type="button"
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronDown className={cn("h-4 w-4 transition-transform", showAdvanced && "rotate-180")} />
+        고급 옵션
+      </button>
+      {showAdvanced && (
+        <MediaSection
+          uploadedImages={uploadedImages}
+          setUploadedImages={setUploadedImages}
+        />
+      )}
 
       {/* 스타일별 추가 입력 + 자유 입력 */}
       <StyleTemplateFields
@@ -164,20 +177,22 @@ export function GenerateForm() {
       {/* 에러 메시지 */}
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {/* 생성 버튼 */}
-      <Button onClick={handleSubmit} disabled={loading || !topic.trim()} className="w-full" size="lg">
-        {loading ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            생성 중...
-          </>
-        ) : (
-          <>
-            <Sparkles className="mr-2 h-4 w-4" />
-            블로그 글 생성
-          </>
-        )}
-      </Button>
+      {/* 생성 버튼 (sticky) */}
+      <div className="sticky bottom-4 z-10 pt-4">
+        <Button onClick={handleSubmit} disabled={loading || !topic.trim()} className="w-full h-12 text-base font-medium" size="lg">
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              생성 중...
+            </>
+          ) : (
+            <>
+              <Sparkles className="mr-2 h-4 w-4" />
+              블로그 글 생성
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

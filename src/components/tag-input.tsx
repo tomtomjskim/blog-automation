@@ -10,9 +10,10 @@ interface TagInputProps {
   onChange: (tags: string[]) => void;
   placeholder?: string;
   maxTags?: number;
+  id?: string;
 }
 
-export function TagInput({ tags, onChange, placeholder = '키워드 입력 후 Enter', maxTags = 10 }: TagInputProps) {
+export function TagInput({ tags, onChange, placeholder = '키워드 입력 후 Enter', maxTags = 10, id }: TagInputProps) {
   const [input, setInput] = useState('');
 
   const addTag = (value: string) => {
@@ -47,6 +48,7 @@ export function TagInput({ tags, onChange, placeholder = '키워드 입력 후 E
         </Badge>
       ))}
       <Input
+        id={id}
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}

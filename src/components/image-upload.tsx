@@ -13,9 +13,10 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 interface ImageUploadProps {
   images: UploadedImage[];
   onChange: (images: UploadedImage[]) => void;
+  id?: string;
 }
 
-export function ImageUpload({ images, onChange }: ImageUploadProps) {
+export function ImageUpload({ images, onChange, id }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -109,6 +110,7 @@ export function ImageUpload({ images, onChange }: ImageUploadProps) {
             </p>
           </div>
           <input
+            id={id}
             ref={inputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
