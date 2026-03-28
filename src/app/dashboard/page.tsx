@@ -43,6 +43,10 @@ export default function DashboardPage() {
 
   const maxDaily = Math.max(...data.dailyStats.map(d => d.count), 1);
   const maxStyle = Math.max(...data.styleStats.map(s => s.count), 1);
+  const seoScoreColor =
+    data.summary.avgSeoScore >= 80 ? 'text-success' :
+    data.summary.avgSeoScore >= 60 ? 'text-warning' :
+    'text-destructive';
 
   return (
     <div className="space-y-6">
@@ -69,7 +73,7 @@ export default function DashboardPage() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">평균 SEO</span>
             </div>
-            <div className="mt-1 text-2xl font-bold">{data.summary.avgSeoScore}</div>
+            <div className={`mt-1 text-2xl font-bold ${seoScoreColor}`}>{data.summary.avgSeoScore}</div>
             <div className="text-xs text-muted-foreground">/ 100점</div>
           </CardContent>
         </Card>

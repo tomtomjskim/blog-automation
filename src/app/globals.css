@@ -23,6 +23,12 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
+  --success: oklch(0.55 0.15 142);
+  --success-bg: oklch(0.95 0.05 142);
+  --warning: oklch(0.65 0.18 70);
+  --warning-bg: oklch(0.97 0.04 70);
+  --info: oklch(0.55 0.16 220);
+  --info-bg: oklch(0.95 0.04 220);
 }
 
 .dark {
@@ -67,6 +73,12 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

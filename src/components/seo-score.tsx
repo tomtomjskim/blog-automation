@@ -5,10 +5,10 @@ import { CheckCircle, AlertTriangle, XCircle, Info, ChevronDown, ChevronUp, Ligh
 import type { SeoAnalysis } from '@/lib/types';
 
 const statusIcon = {
-  good: <CheckCircle className="h-4 w-4 text-green-500" />,
-  warning: <AlertTriangle className="h-4 w-4 text-yellow-500" />,
-  error: <XCircle className="h-4 w-4 text-red-500" />,
-  info: <Info className="h-4 w-4 text-blue-500" />,
+  good: <CheckCircle className="h-4 w-4 text-success" />,
+  warning: <AlertTriangle className="h-4 w-4 text-warning" />,
+  error: <XCircle className="h-4 w-4 text-destructive" />,
+  info: <Info className="h-4 w-4 text-info" />,
 };
 
 interface SeoScoreProps {
@@ -18,7 +18,7 @@ interface SeoScoreProps {
 export function SeoScore({ analysis }: SeoScoreProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const percentage = Math.round((analysis.score / analysis.maxScore) * 100);
-  const color = percentage >= 70 ? 'text-green-500' : percentage >= 40 ? 'text-yellow-500' : 'text-red-500';
+  const color = percentage >= 80 ? 'text-success' : percentage >= 60 ? 'text-warning' : 'text-destructive';
 
   return (
     <div className="space-y-3">
@@ -28,7 +28,7 @@ export function SeoScore({ analysis }: SeoScoreProps) {
       </div>
       <div className="h-2 w-full rounded-full bg-secondary">
         <div
-          className={`h-2 rounded-full transition-all ${percentage >= 70 ? 'bg-green-500' : percentage >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
+          className={`h-2 rounded-full transition-all ${percentage >= 80 ? 'bg-success' : percentage >= 60 ? 'bg-warning' : 'bg-destructive'}`}
           style={{ width: `${percentage}%` }}
         />
       </div>
