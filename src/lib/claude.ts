@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { readFile } from 'fs/promises';
+import { logger } from '@/lib/logger';
 
 export interface ClaudeUsage {
   inputTokens: number;
@@ -34,7 +35,7 @@ export async function runClaude(prompt: string, options?: ClaudeOptions): Promis
   const start = Date.now();
   const maxTurns = options?.maxTurns ?? 1;
   const timeout = options?.timeout ?? 180000; // 블로그 생성: 3분
-  console.log(`[Claude] Starting CLI, prompt length=${prompt.length}, maxTurns=${maxTurns}`);
+  logger.info(`[Claude] Starting CLI, prompt length=${prompt.length}, maxTurns=${maxTurns}`);
 
   const args = ['-p', prompt, '--output-format', 'json', '--max-turns', String(maxTurns)];
 
@@ -56,8 +57,8 @@ export async function runClaude(prompt: string, options?: ClaudeOptions): Promis
       if (settled) return;
       settled = true;
       const duration = Math.round((Date.now() - start) / 1000);
-      console.log(`[Claude] Finished: exitCode=${code}, signal=${signal}, stdout=${stdout.length}ch, stderr=${stderr.length}ch, duration=${duration}s`);
-      if (stderr) console.log(`[Claude] stderr: ${stderr.slice(0, 500)}`);
+      logger.info(`[Claude] Finished: exitCode=${code}, signal=${signal}, stdout=${stdout.length}ch, stderr=${stderr.length}ch, duration=${duration}s`);
+      if (stderr) logger.debug(`[Claude] stderr: ${stderr.slice(0, 500)}`);
 
       let output = stdout;
       let usage: ClaudeUsage = { ...ZERO_USAGE };
@@ -67,7 +68,7 @@ export async function runClaude(prompt: string, options?: ClaudeOptions): Promis
         if (json.result !== undefined && json.result !== null) {
           output = typeof json.result === 'string' ? json.result : JSON.stringify(json.result);
         } else if (json.type === 'result') {
-          console.log(`[Claude] Result subtype: ${json.subtype || 'unknown'}, num_turns: ${json.num_turns || '?'}`);
+          logger.debug(`[Claude] Result subtype: ${json.subtype || 'unknown'}, num_turns: ${json.num_turns || '?'}`);
           output = '';
         }
         if (json.usage) {
@@ -79,9 +80,9 @@ export async function runClaude(prompt: string, options?: ClaudeOptions): Promis
         if (typeof json.total_cost_usd === 'number') {
           usage.costUsd = json.total_cost_usd;
         }
-        console.log(`[Claude] Usage: in=${usage.inputTokens}, out=${usage.outputTokens}, cost=$${usage.costUsd.toFixed(6)}`);
+        logger.info(`[Claude] Usage: in=${usage.inputTokens}, out=${usage.outputTokens}, cost=$${usage.costUsd.toFixed(6)}`);
       } catch {
-        console.log('[Claude] JSON parse failed, using raw stdout as output');
+        logger.debug('[Claude] JSON parse failed, using raw stdout as output');
       }
 
       resolve({ output, stderr, exitCode: code ?? 1, durationSec: duration, usage });
@@ -90,7 +91,7 @@ export async function runClaude(prompt: string, options?: ClaudeOptions): Promis
     proc.on('error', (err) => {
       if (settled) return;
       settled = true;
-      console.error(`[Claude] Process error:`, err.message);
+      logger.error(`[Claude] Process error:`, err.message);
       reject(err);
     });
   });
@@ -104,7 +105,7 @@ export async function runClaudeWithImages(
 ): Promise<ClaudeResult> {
   const start = Date.now();
   const timeout = options?.timeout ?? 180000;
-  console.log(`[Claude] Starting vision CLI, images=${imagePaths.length}, prompt length=${prompt.length}`);
+  logger.info(`[Claude] Starting vision CLI, images=${imagePaths.length}, prompt length=${prompt.length}`);
 
   const args = [
     '--input-format', 'stream-json',
@@ -160,7 +161,7 @@ export async function runClaudeWithImages(
       if (settled) return;
       settled = true;
       const duration = Math.round((Date.now() - start) / 1000);
-      console.log(`[Claude] Vision finished: exitCode=${code}, signal=${signal}, stdout=${stdout.length}ch, duration=${duration}s`);
+      logger.info(`[Claude] Vision finished: exitCode=${code}, signal=${signal}, stdout=${stdout.length}ch, duration=${duration}s`);
 
       let output = '';
       let usage: ClaudeUsage = { ...ZERO_USAGE };
@@ -188,18 +189,18 @@ export async function runClaudeWithImages(
           }
         }
       } catch {
-        console.log('[Claude] Vision: stream-json parse failed, using raw stdout');
+        logger.debug('[Claude] Vision: stream-json parse failed, using raw stdout');
         output = stdout;
       }
 
-      console.log(`[Claude] Vision usage: in=${usage.inputTokens}, out=${usage.outputTokens}, cost=$${usage.costUsd.toFixed(6)}`);
+      logger.info(`[Claude] Vision usage: in=${usage.inputTokens}, out=${usage.outputTokens}, cost=$${usage.costUsd.toFixed(6)}`);
       resolve({ output, stderr, exitCode: code ?? 1, durationSec: duration, usage });
     });
 
     proc.on('error', (err) => {
       if (settled) return;
       settled = true;
-      console.error(`[Claude] Vision process error:`, err.message);
+      logger.error(`[Claude] Vision process error:`, err.message);
       reject(err);
     });
   });

@@ -1,5 +1,6 @@
 import { query, queryOne } from './db';
 import { getRunningCount } from './generation-store';
+import { logger } from '@/lib/logger';
 
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
@@ -8,7 +9,7 @@ let isRunning = false;
 export function startScheduler() {
   if (schedulerInterval) return;
 
-  console.log('[Scheduler] Started - checking every 5 minutes');
+  logger.info('[Scheduler] Started - checking every 5 minutes');
   schedulerInterval = setInterval(checkAndRunScheduled, 5 * 60 * 1000);
 
   // 시작 즉시 1회 실행
@@ -20,23 +21,7 @@ export function stopScheduler() {
   if (schedulerInterval) {
     clearInterval(schedulerInterval);
     schedulerInterval = null;
-    console.log('[Scheduler] Stopped');
-  }
-}
-
-/** 스턱 generation 정리 (30분 이상 running 상태인 레코드를 failed로 변경) */
-async function cleanupStuckGenerations() {
-  const stuck = await query<{ id: string }>(
-    `UPDATE generations
-     SET status = 'failed',
-         error  = 'Timeout: generation stuck for over 30 minutes'
-     WHERE status = 'running'
-       AND created_at < NOW() - INTERVAL '30 minutes'
-     RETURNING id`,
-  );
-
-  if (stuck.length > 0) {
-    console.log(`[scheduler] Cleaned up ${stuck.length} stuck generation(s)`);
+    logger.info('[Scheduler] Stopped');
   }
 }
 
@@ -46,9 +31,6 @@ async function checkAndRunScheduled() {
   isRunning = true;
 
   try {
-    // 스턱 generation 정리
-    await cleanupStuckGenerations();
-
     // 동시 생성 체크
     if (getRunningCount() >= 1) {
       return;
@@ -75,7 +57,7 @@ async function checkAndRunScheduled() {
 
     if (!scheduled) return;
 
-    console.log(`[Scheduler] Running scheduled post: ${scheduled.id} - ${scheduled.topic}`);
+    logger.info(`[Scheduler] Running scheduled post: ${scheduled.id} - ${scheduled.topic}`);
 
     // 상태를 running으로 변경
     await query(
@@ -106,24 +88,24 @@ async function checkAndRunScheduled() {
           `UPDATE scheduled_posts SET status = 'completed', generation_id = $2 WHERE id = $1`,
           [scheduled.id, data.id],
         );
-        console.log(`[Scheduler] Completed: ${scheduled.id} → generation ${data.id}`);
+        logger.info(`[Scheduler] Completed: ${scheduled.id} → generation ${data.id}`);
       } else {
         const errData = await res.json().catch(() => ({ error: 'Unknown error' }));
         await query(
           `UPDATE scheduled_posts SET status = 'failed' WHERE id = $1`,
           [scheduled.id],
         );
-        console.error(`[Scheduler] Failed: ${scheduled.id}`, errData);
+        logger.error(`[Scheduler] Failed: ${scheduled.id}`, errData);
       }
     } catch (err) {
       await query(
         `UPDATE scheduled_posts SET status = 'failed' WHERE id = $1`,
         [scheduled.id],
       );
-      console.error(`[Scheduler] Error for ${scheduled.id}:`, err);
+      logger.error(`[Scheduler] Error for ${scheduled.id}:`, err);
     }
   } catch (err) {
-    console.error('[Scheduler] Check error:', err);
+    logger.error('[Scheduler] Check error:', err);
   } finally {
     isRunning = false;
   }

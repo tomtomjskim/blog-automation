@@ -4,6 +4,7 @@
  */
 
 import crypto from 'crypto';
+import { logger } from '@/lib/logger';
 
 const API_BASE = 'https://api.klingai.com/v1';
 
