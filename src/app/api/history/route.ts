@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/lib/db';
+import { withApiHandler, apiOk, ApiError } from '@/lib/api';
 
 interface HistoryRow {
   id: string;
@@ -20,8 +21,8 @@ interface HistoryRow {
   created_at: string;
 }
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+export const GET = withApiHandler(async (req: NextRequest) => {
+  const { searchParams } = new URL(req.url);
   const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
   const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20')));
   const search = searchParams.get('search') || '';
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
 
   const total = parseInt(countResult?.count || '0');
 
-  return NextResponse.json({
+  return apiOk({
     items: rows.map(r => ({
       ...r,
       charCount: r.char_count,
@@ -78,14 +79,14 @@ export async function GET(request: NextRequest) {
     limit,
     totalPages: Math.ceil(total / limit),
   });
-}
+}, { tag: 'History' });
 
-export async function DELETE(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+export const DELETE = withApiHandler(async (req: NextRequest) => {
+  const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
 
   if (!id) {
-    return NextResponse.json({ error: 'id 파라미터가 필요합니다.' }, { status: 400 });
+    throw new ApiError('id 파라미터가 필요합니다.', 400);
   }
 
   await query(
@@ -93,5 +94,6 @@ export async function DELETE(request: NextRequest) {
     [id],
   );
 
-  return NextResponse.json({ success: true });
-}
+  return apiOk({ success: true });
+}, { tag: 'History' });
+

@@ -1,5 +1,5 @@
 import { query, queryOne } from './db';
-import { getRunningCount } from './generation-store';
+import { getRunningCount } from './generation-state';
 import { logger } from '@/lib/logger';
 
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
@@ -32,7 +32,7 @@ async function checkAndRunScheduled() {
 
   try {
     // 동시 생성 체크
-    if (getRunningCount() >= 1) {
+    if (await getRunningCount() >= 1) {
       return;
     }
 

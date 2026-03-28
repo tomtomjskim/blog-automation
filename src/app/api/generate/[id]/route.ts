@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
-import { getProgress } from '@/lib/generation-store';
+import { getProgress } from '@/lib/generation-state';
 import type { GenerationRecord } from '@/lib/types';
 
 interface DbRow {
@@ -42,8 +42,8 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // 인메모리 스토어에서 진행 상태 확인
-  const progress = getProgress(id);
+  // DB에서 진행 상태 확인
+  const progress = await getProgress(id);
   if (progress && progress.status === 'running') {
     return NextResponse.json({
       id,

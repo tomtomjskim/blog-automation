@@ -6,7 +6,7 @@ import { STYLE_PROMPTS, buildUserPrompt, buildFoodReviewPrompt, buildQualityRevi
 import { analyzeNaverSEO, parseResult } from '@/lib/seo-analyzer';
 import { buildPersonaSystemPrompt } from '@/lib/personas';
 import { naturalizeContent } from '@/lib/naturalization';
-import { setProgress, getRunningCount } from '@/lib/generation-store';
+import { setProgress, getRunningCount } from '@/lib/generation-state';
 import { isKlingConfigured, generateImage, buildImagePromptInstruction, parseImagePrompts } from '@/lib/kling';
 import path from 'path';
 import { stat as fsStat } from 'fs/promises';
@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
       topic, keywords = [], style = 'casual', length = 'standard',
       mode = 'quick', tone = 'haeyoche', persona = null,
       naturalize = false, additionalInfo = '',
+      customSystemPrompt = null,
       styleProfileId = null, generateImages = false,
       imageIds = [],
-      includeFaq = false, lsiKeywords = [], titleStyle = 'auto',
     } = body;
 
     // 검증
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 동시 생성 제한
-    if (getRunningCount() >= 1) {
+    if (await getRunningCount() >= 1) {
       return NextResponse.json({ error: '이미 생성 중인 글이 있습니다. 완료 후 다시 시도해주세요.' }, { status: 429 });
     }
 
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       [id, topic.trim(), keywords, style, length, mode, tone || null, persona || null, styleProfileId],
     );
 
-    setProgress(id, 'running', '글 생성을 시작합니다...');
+    await setProgress(id, 'running', '글 생성을 시작합니다...');
 
     // 비동기 백그라운드 실행
     runGeneration(id, {
@@ -76,12 +76,10 @@ export async function POST(request: NextRequest) {
       persona: persona as PersonaId | null,
       naturalize: !!naturalize,
       additionalInfo,
+      customSystemPrompt: typeof customSystemPrompt === 'string' ? customSystemPrompt : null,
       styleProfileId,
       generateImages: generateImages && isKlingConfigured(),
       imageIds: Array.isArray(imageIds) ? imageIds : [],
-      includeFaq: !!includeFaq,
-      lsiKeywords: Array.isArray(lsiKeywords) ? lsiKeywords : [],
-      titleStyle: titleStyle || 'auto',
     }).catch(err => {
       console.error(`[Generate] Background error for ${id}:`, err);
     });
@@ -105,12 +103,10 @@ async function runGeneration(
     persona: PersonaId | null;
     naturalize: boolean;
     additionalInfo: string;
+    customSystemPrompt: string | null;
     styleProfileId: string | null;
     generateImages: boolean;
     imageIds: string[];
-    includeFaq: boolean;
-    lsiKeywords: string[];
-    titleStyle: 'number' | 'question' | 'tip' | 'auto';
   },
 ) {
   const startTime = Date.now();
@@ -120,8 +116,10 @@ async function runGeneration(
     let totalOutputTokens = 0;
     let totalCost = 0;
 
-    // 시스템 프롬프트: 페르소나 기반 통합 빌더 사용
-    let systemPrompt = buildPersonaSystemPrompt(params.persona, params.style, params.tone);
+    // 시스템 프롬프트: 커스텀 스타일 프롬프트가 있으면 우선 사용, 없으면 페르소나 기반 빌더 사용
+    let systemPrompt = params.customSystemPrompt
+      ? params.customSystemPrompt
+      : buildPersonaSystemPrompt(params.persona, params.style, params.tone);
 
     if (params.styleProfileId) {
       const profile = await queryOne<{ profile: string }>(
@@ -139,7 +137,7 @@ async function runGeneration(
     const hasImages = params.imageIds.length > 0;
 
     if (hasImages) {
-      setProgress(id, 'running', '첨부 이미지를 분석하고 있습니다...');
+      await setProgress(id, 'running', '첨부 이미지를 분석하고 있습니다...');
 
       const UPLOAD_DIR = '/app/uploads/images';
       const imagePaths: string[] = [];
@@ -198,13 +196,7 @@ async function runGeneration(
       }
     }
 
-    const promptParams = {
-      ...params,
-      imageContext: imageContext || undefined,
-      includeFaq: params.includeFaq || undefined,
-      lsiKeywords: params.lsiKeywords.length > 0 ? params.lsiKeywords : undefined,
-      titleStyle: params.titleStyle !== 'auto' ? params.titleStyle : undefined,
-    };
+    const promptParams = { ...params, imageContext: imageContext || undefined };
     const userPrompt = params.style === 'food_review'
       ? buildFoodReviewPrompt(promptParams)
       : buildUserPrompt(promptParams);
@@ -213,7 +205,7 @@ async function runGeneration(
     const hasNaturalize = params.naturalize;
     const totalSteps = (hasImages ? 1 : 0) + (params.mode === 'quality' ? 2 : 1) + (params.generateImages ? 1 : 0) + (hasNaturalize ? 1 : 0);
     let step = 1;
-    setProgress(id, 'running', `글을 생성하고 있습니다... (${step}/${totalSteps} 단계)`);
+    await setProgress(id, 'running', `글을 생성하고 있습니다... (${step}/${totalSteps} 단계)`);
 
     const result1 = await runClaudeForBlog(systemPrompt, userPrompt, { timeout: 180000 });
 
@@ -229,7 +221,7 @@ async function runGeneration(
     // 2단계: Quality 모드 — 고도화
     if (params.mode === 'quality') {
       step++;
-      setProgress(id, 'running', `글을 고도화하고 있습니다... (${step}/${totalSteps} 단계)`);
+      await setProgress(id, 'running', `글을 고도화하고 있습니다... (${step}/${totalSteps} 단계)`);
       const reviewPrompt = buildQualityReviewPrompt(result1.output);
       const result2 = await runClaudeForBlog(systemPrompt, reviewPrompt, { timeout: 180000 });
 
@@ -247,9 +239,9 @@ async function runGeneration(
 
     if (hasNaturalize) {
       step++;
-      setProgress(id, 'running', `문체를 자연화하고 있습니다... (${step}/${totalSteps} 단계)`);
+      await setProgress(id, 'running', `문체를 자연화하고 있습니다... (${step}/${totalSteps} 단계)`);
       try {
-        const natResult = await naturalizeContent(finalOutput, params.persona);
+        const natResult = await naturalizeContent(finalOutput);
         finalOutput = natResult.naturalizedContent;
         naturalizationScore = natResult.score;
         naturalizationChanges = natResult.changes;
@@ -266,7 +258,7 @@ async function runGeneration(
     let imageUrls: string[] = [...attachedImageUrls];
     if (params.generateImages) {
       step++;
-      setProgress(id, 'running', `이미지를 생성하고 있습니다... (${step}/${totalSteps} 단계)`);
+      await setProgress(id, 'running', `이미지를 생성하고 있습니다... (${step}/${totalSteps} 단계)`);
 
       try {
         const imgPromptReq = `다음 블로그 글의 핵심 주제를 시각적으로 표현하는 영문 이미지 프롬프트를 2개 생성해주세요.\n\n블로그 글:\n${finalOutput.slice(0, 2000)}\n${buildImagePromptInstruction(2)}`;
@@ -312,7 +304,7 @@ async function runGeneration(
        naturalizationScore, naturalizationChanges ? JSON.stringify(naturalizationChanges) : null],
     );
 
-    setProgress(id, 'completed', '완료!');
+    await setProgress(id, 'completed', '완료!');
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
     const durationSec = Math.round((Date.now() - startTime) / 1000);
@@ -323,6 +315,6 @@ async function runGeneration(
       [id, errorMsg, durationSec],
     ).catch(dbErr => console.error('[Generate] DB update error:', dbErr));
 
-    setProgress(id, 'failed', '생성 실패', errorMsg);
+    await setProgress(id, 'failed', '생성 실패', errorMsg);
   }
 }
