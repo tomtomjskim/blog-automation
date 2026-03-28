@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       naturalize = false, additionalInfo = '',
       styleProfileId = null, generateImages = false,
       imageIds = [],
+      includeFaq = false, lsiKeywords = [], titleStyle = 'auto',
     } = body;
 
     // 검증
@@ -78,6 +79,9 @@ export async function POST(request: NextRequest) {
       styleProfileId,
       generateImages: generateImages && isKlingConfigured(),
       imageIds: Array.isArray(imageIds) ? imageIds : [],
+      includeFaq: !!includeFaq,
+      lsiKeywords: Array.isArray(lsiKeywords) ? lsiKeywords : [],
+      titleStyle: titleStyle || 'auto',
     }).catch(err => {
       console.error(`[Generate] Background error for ${id}:`, err);
     });
@@ -104,6 +108,9 @@ async function runGeneration(
     styleProfileId: string | null;
     generateImages: boolean;
     imageIds: string[];
+    includeFaq: boolean;
+    lsiKeywords: string[];
+    titleStyle: 'number' | 'question' | 'tip' | 'auto';
   },
 ) {
   const startTime = Date.now();
@@ -191,7 +198,13 @@ async function runGeneration(
       }
     }
 
-    const promptParams = { ...params, imageContext: imageContext || undefined };
+    const promptParams = {
+      ...params,
+      imageContext: imageContext || undefined,
+      includeFaq: params.includeFaq || undefined,
+      lsiKeywords: params.lsiKeywords.length > 0 ? params.lsiKeywords : undefined,
+      titleStyle: params.titleStyle !== 'auto' ? params.titleStyle : undefined,
+    };
     const userPrompt = params.style === 'food_review'
       ? buildFoodReviewPrompt(promptParams)
       : buildUserPrompt(promptParams);
@@ -236,7 +249,7 @@ async function runGeneration(
       step++;
       setProgress(id, 'running', `문체를 자연화하고 있습니다... (${step}/${totalSteps} 단계)`);
       try {
-        const natResult = await naturalizeContent(finalOutput);
+        const natResult = await naturalizeContent(finalOutput, params.persona);
         finalOutput = natResult.naturalizedContent;
         naturalizationScore = natResult.score;
         naturalizationChanges = natResult.changes;

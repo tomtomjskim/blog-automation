@@ -40,3 +40,7 @@ Thumbs.db
 tmp/
 temp/
 .serena/
+
+# harness-kit 빌드 산출물 (소스: harness.config.yaml + .harness/modules/)
+CLAUDE.md
+.harness/.build-manifest.json

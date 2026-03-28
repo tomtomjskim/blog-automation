@@ -24,12 +24,31 @@ export function stopScheduler() {
   }
 }
 
+/** 스턱 generation 정리 (30분 이상 running 상태인 레코드를 failed로 변경) */
+async function cleanupStuckGenerations() {
+  const stuck = await query<{ id: string }>(
+    `UPDATE generations
+     SET status = 'failed',
+         error  = 'Timeout: generation stuck for over 30 minutes'
+     WHERE status = 'running'
+       AND created_at < NOW() - INTERVAL '30 minutes'
+     RETURNING id`,
+  );
+
+  if (stuck.length > 0) {
+    console.log(`[scheduler] Cleaned up ${stuck.length} stuck generation(s)`);
+  }
+}
+
 /** 예약된 글 확인 & 실행 */
 async function checkAndRunScheduled() {
   if (isRunning) return;
   isRunning = true;
 
   try {
+    // 스턱 generation 정리
+    await cleanupStuckGenerations();
+
     // 동시 생성 체크
     if (getRunningCount() >= 1) {
       return;

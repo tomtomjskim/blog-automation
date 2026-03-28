@@ -12,7 +12,7 @@ import { PersonaSelector } from './persona-selector';
 import { StyleTemplateFields } from './style-template-fields';
 import { STYLE_OPTIONS, LENGTH_OPTIONS } from '@/lib/prompts';
 import { serializeTemplateData, getStyleSpecificKeys, deserializeTemplateData } from '@/lib/style-templates';
-import type { StyleId, LengthId, GenerationMode, ToneId, PersonaId, StyleProfile, UploadedImage, TemplateData, TemplateField } from '@/lib/types';
+import type { StyleId, LengthId, GenerationMode, ToneId, PersonaId, StyleProfile, UploadedImage, TemplateData, TemplateField, TitleStyle } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface CustomStyle {

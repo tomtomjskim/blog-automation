@@ -31,6 +31,8 @@ export interface UploadedImage {
   url: string;
 }
 
+export type TitleStyle = 'number' | 'question' | 'tip' | 'auto';
+
 export interface GenerateRequest {
   topic: string;
   keywords?: string[];
@@ -42,6 +44,9 @@ export interface GenerateRequest {
   additionalInfo?: string;
   imageIds?: string[];
   naturalize?: boolean;
+  includeFaq?: boolean;
+  lsiKeywords?: string[];
+  titleStyle?: TitleStyle;
 }
 
 export interface GenerationRecord {
@@ -78,7 +83,7 @@ export interface GenerationRecord {
 }
 
 export interface NaturalizationChange {
-  type: 'vocab' | 'sentence' | 'experience' | 'structure';
+  type: 'vocab' | 'sentence' | 'experience' | 'structure' | 'conjunction';
   original: string;
   replaced: string;
 }

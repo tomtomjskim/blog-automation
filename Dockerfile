@@ -32,6 +32,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # 이미지 업로드 디렉토리
 RUN mkdir -p /app/uploads/images && chown nextjs:nodejs /app/uploads/images
 
+USER nextjs
+
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
