@@ -51,6 +51,12 @@
   --border: oklch(0.269 0 0);
   --input: oklch(0.269 0 0);
   --ring: oklch(0.439 0 0);
+  --success: oklch(0.65 0.15 142);
+  --success-bg: oklch(0.18 0.05 142);
+  --warning: oklch(0.75 0.18 70);
+  --warning-bg: oklch(0.18 0.05 70);
+  --info: oklch(0.65 0.16 220);
+  --info-bg: oklch(0.18 0.04 220);
 }
 
 @theme inline {
